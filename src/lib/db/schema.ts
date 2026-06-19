@@ -114,6 +114,8 @@ export const interns = pgTable(
       .unique()
       .references(() => users.id, { onDelete: "cascade" }),
     fullName: text("full_name").notNull(),
+    // Inside your interns table definition in schema.ts
+    phone: text("phone").unique(),
     college: text("college").notNull(),
     courseType: courseTypeEnum("course_type").notNull(),
     fieldOfInterest: text("field_of_interest").notNull(),
