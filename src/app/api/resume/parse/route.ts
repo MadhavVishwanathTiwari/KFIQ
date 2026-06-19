@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { getSessionFromRequest, unauthorizedResponse } from "@/lib/auth";
-import { parseResumeFromUrl, parseResumeWithSharpApi } from "@/lib/sharpapi";
+import { parseResumeFromSupabase, parseResumeWithSharpApi } from "@/lib/sharpapi";
 import { db } from "@/lib/db";
 import { getInternById } from "@/lib/db/queries";
 import { interns } from "@/lib/db/schema";
@@ -22,10 +22,13 @@ async function loadLocalResumeFile(resumeUrl: string): Promise<File | null> {
   const filePath = path.join(process.cwd(), "uploads", "resumes", fileName);
 
   try {
-    const buffer = await readFile(filePath);
-    return new File([buffer], fileName, {
-      type: "application/octet-stream",
-    });
+    const localFile = await loadLocalResumeFile(record.intern.resumeUrl);
+    const parsed = localFile
+      ? await parseResumeWithSharpApi(localFile)
+      : await parseResumeFromSupabase(record.intern.resumeUrl);
+
+    await persistParsedResumeData(session.internId, parsed);
+    await markResumeParsing(session.internId, "done");
   } catch {
     return null;
   }
