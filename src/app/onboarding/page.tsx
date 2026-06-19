@@ -26,11 +26,13 @@ export default function OnboardingPage() {
   const [password, setPassword] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [loading, setLoading] = useState(Boolean(emailFromUrl));
+  const [isInitializing, setIsInitializing] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [otpNotice, setOtpNotice] = useState<string | null>(null);
   const [state, setState] = useState<OnboardingState | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [activeStep, setActiveStep] = useState<StepId>("password");
+  
   const hasInitializedStep = useRef(false);
 
   // Phone verification states
@@ -133,10 +135,12 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     if (emailFromUrl) {
-      void checkEmail(emailFromUrl);
+      // Chain a finally to clear initializing state
+      checkEmail(emailFromUrl).finally(() => setIsInitializing(false));
       return;
     }
-    void refreshStatus()
+    
+    refreshStatus()
       .then((intern) => {
         if (intern && !hasInitializedStep.current) {
           setActiveStep(getSuggestedStep(intern));
@@ -144,7 +148,10 @@ export default function OnboardingPage() {
         }
       })
       .catch(() => undefined)
-      .finally(() => setLoading(false));
+      .finally(() => {
+        setLoading(false);
+        setIsInitializing(false); // Add this line
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
