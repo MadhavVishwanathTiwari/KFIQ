@@ -22,13 +22,10 @@ async function loadLocalResumeFile(resumeUrl: string): Promise<File | null> {
   const filePath = path.join(process.cwd(), "uploads", "resumes", fileName);
 
   try {
-    const localFile = await loadLocalResumeFile(record.intern.resumeUrl);
-    const parsed = localFile
-      ? await parseResumeWithSharpApi(localFile)
-      : await parseResumeFromSupabase(record.intern.resumeUrl);
-
-    await persistParsedResumeData(session.internId, parsed);
-    await markResumeParsing(session.internId, "done");
+    const buffer = await readFile(filePath);
+    return new File([buffer], fileName, {
+      type: "application/octet-stream",
+    });
   } catch {
     return null;
   }
@@ -72,7 +69,7 @@ export async function POST(request: NextRequest) {
       const localFile = await loadLocalResumeFile(record.intern.resumeUrl);
       const parsed = localFile
         ? await parseResumeWithSharpApi(localFile)
-        : await parseResumeFromUrl(record.intern.resumeUrl);
+        : await parseResumeFromSupabase(record.intern.resumeUrl);
 
       await persistParsedResumeData(session.internId, parsed);
       await markResumeParsing(session.internId, "done");
