@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest, unauthorizedResponse } from "@/lib/auth";
 import { getInternById } from "@/lib/db/queries";
 import { setResumePending } from "@/lib/parse-resume";
-import { uploadResumeFile } from "@/lib/s3";
+import { uploadResumeFile } from "@/lib/storage";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_TYPES = new Set([

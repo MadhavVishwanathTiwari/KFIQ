@@ -1,4 +1,5 @@
 import type { ParsedResumeData } from "@/lib/resume-parser-types";
+import { supabase } from "@/lib/storage";
 
 type SharpApiPosition = {
   position_name?: string | null;
@@ -241,23 +242,26 @@ export async function parseResumeWithSharpApi(
   return pollResumeJob(statusUrl, apiKey);
 }
 
-export async function parseResumeFromUrl(
-  resumeUrl: string
+export async function parseResumeFromSupabase(
+  filePath: string
 ): Promise<ParsedResumeData> {
   const apiKey = process.env.SHARPAPI_API_KEY;
   if (!apiKey) {
     return mockParsedResumeData();
   }
 
-  const fileResponse = await fetch(resumeUrl);
-  if (!fileResponse.ok) {
-    throw new Error(`Failed to download resume (${fileResponse.status})`);
+  const { data, error } = await supabase.storage
+    .from("resumes")
+    .download(filePath);
+
+  if (error || !data) {
+    throw new Error(`Failed to download resume from Supabase (403/404): ${error?.message || "Unknown"}`);
   }
 
-  const buffer = await fileResponse.arrayBuffer();
-  const fileName = resumeUrl.split("/").pop()?.split("?")[0] || "resume.pdf";
+  const buffer = await data.arrayBuffer();
+  const fileName = filePath.split("/").pop() || "resume.pdf";
   const file = new File([buffer], fileName, {
-    type: fileResponse.headers.get("content-type") ?? "application/octet-stream",
+    type: data.type,
   });
 
   return parseResumeWithSharpApi(file);
