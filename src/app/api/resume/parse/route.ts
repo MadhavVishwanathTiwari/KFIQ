@@ -24,7 +24,10 @@ function guessMimeType(fileName: string): string {
 async function loadLocalResumeFile(resumeUrl: string): Promise<File | null> {
   const marker = "/api/uploads/resumes/";
   const index = resumeUrl.indexOf(marker);
-  if (index === -1) return null; // not a local file — it's in Supabase storage
+  
+  if (index === -1) {
+    return null; 
+  }
 
   const fileName = resumeUrl.slice(index + marker.length);
   const filePath = path.join(process.cwd(), "uploads", "resumes", fileName);
@@ -32,9 +35,12 @@ async function loadLocalResumeFile(resumeUrl: string): Promise<File | null> {
   try {
     const buffer = await readFile(filePath);
     return new File([buffer], fileName, { type: guessMimeType(fileName) });
-  } catch {
-    return null;
+  } catch (error) {
+    console.error("Local file read error:", error);
   }
+  
+  // Explicit fallback return satisfies the TypeScript compiler
+  return null;
 }
 
 export async function POST(request: NextRequest) {
