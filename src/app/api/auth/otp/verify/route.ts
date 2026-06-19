@@ -1,48 +1,70 @@
 // src/app/api/auth/otp/verify/route.ts
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { setSessionCookie } from "@/lib/auth";
-import { getInternByEmail, toOnboardingIntern } from "@/lib/db/queries";
+import { getInternByEmail } from "@/lib/db/queries";
 import { supabase } from "@/lib/storage";
+import { createClient } from "@supabase/supabase-js";
 
 const bodySchema = z.object({
   email: z.string().email(),
-  token: z.string().length(6), // Supabase's default OTP length — see note below
+  code: z.string().min(4),
+  method: z.enum(["email", "sms"]).default("email")
 });
 
 export async function POST(request: Request) {
   try {
-    const body = bodySchema.parse(await request.json());
+    const { email, code, method } = bodySchema.parse(await request.json());
 
-    const record = await getInternByEmail(body.email);
-    if (!record) {
-      return NextResponse.json({ error: "No intern account found for this email." }, { status: 404 });
+    if (method === "email") {
+      const { data, error } = await supabase.auth.verifyOtp({ email, token: code, type: "email" });
+      if (error) throw error;
+      return NextResponse.json({ session: data.session });
     }
 
-    const { error: verifyError } = await supabase.auth.verifyOtp({
-      email: record.user.email, // canonical stored email, not raw user input
-      token: body.token,
-      type: "email",
-    });
+    if (method === "sms") {
+      const record = await getInternByEmail(email);
+      const phone = (record?.intern as any)?.phone;
 
-    if (verifyError) {
-      return NextResponse.json(
-        { error: "Invalid or expired code. Request a new one and try again." },
-        { status: 401 }
+      // 1. Verify code with TextLink
+      const textlinkRes = await fetch("https://textlinksms.com/api/verify-code", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.TEXTLINK_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ phone_number: phone, code })
+      });
+      const textlinkData = await textlinkRes.json();
+
+      if (!textlinkData.ok) {
+        return NextResponse.json({ error: "Invalid SMS code." }, { status: 400 });
+      }
+
+      // 2. Code is valid. Force a Supabase session using the Admin API
+      const supabaseAdmin = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
       );
+      
+      const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+        type: "magiclink",
+        email: email,
+      });
+      if (linkError) throw linkError;
+
+      // Extract the token_hash to instantly consume the generated magic link on the server
+      const url = new URL(linkData.properties.action_link);
+      const token_hash = url.searchParams.get("token_hash");
+
+      const { data: sessionData, error: sessionError } = await supabase.auth.verifyOtp({
+        type: "magiclink",
+        token_hash: token_hash!,
+      });
+      if (sessionError) throw sessionError;
+
+      return NextResponse.json({ session: sessionData.session });
     }
-
-    await setSessionCookie({
-      internId: record.intern.id,
-      userId: record.user.id,
-      email: record.user.email,
-    });
-
-    return NextResponse.json({ intern: toOnboardingIntern(record) });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.flatten() }, { status: 400 });
-    }
     console.error("OTP verify error:", error);
     return NextResponse.json({ error: "Failed to verify code" }, { status: 500 });
   }

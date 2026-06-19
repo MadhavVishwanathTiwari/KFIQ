@@ -15,7 +15,7 @@ import {
 } from "@/lib/onboarding-steps";
 import type { OnboardingState, ProfileData } from "@/lib/types";
 
-type EntryStage = "email" | "password" | "otp";
+type EntryStage = "email" | "password" | "choose-method" | "otp";
 
 export default function OnboardingPage() {
   const searchParams = useSearchParams();
@@ -32,6 +32,13 @@ export default function OnboardingPage() {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [activeStep, setActiveStep] = useState<StepId>("password");
   const hasInitializedStep = useRef(false);
+
+  // Phone verification states
+  const [phoneInfo, setPhoneInfo] = useState<{ hasPhone: boolean; maskedPhone: string | null }>({
+    hasPhone: false,
+    maskedPhone: null,
+  });
+  const [otpMethod, setOtpMethod] = useState<"email" | "sms">("email");
 
   const refreshStatus = useCallback(async () => {
     const res = await fetch("/api/onboarding/status");
@@ -63,20 +70,27 @@ export default function OnboardingPage() {
     [refreshStatus]
   );
 
-  const sendOtp = useCallback(async (targetEmail: string) => {
+  const sendOtp = useCallback(async (targetEmail: string, method: "email" | "sms") => {
     setLoading(true);
     setError(null);
     setOtpNotice(null);
+    setOtpMethod(method);
+    
     try {
       const res = await fetch("/api/auth/otp/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: targetEmail }),
+        body: JSON.stringify({ email: targetEmail, method }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Could not send verification code");
+      
       setEntryStage("otp");
-      setOtpNotice(`We sent a verification code to ${targetEmail}.`);
+      setOtpNotice(
+        method === "sms"
+          ? `We sent a verification code to your phone.`
+          : `We sent a verification code to ${targetEmail}.`
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -97,11 +111,17 @@ export default function OnboardingPage() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Could not find that account");
 
+        setPhoneInfo({ hasPhone: data.hasPhone, maskedPhone: data.maskedPhone });
+
         if (data.hasPassword) {
           setEntryStage("password");
           setLoading(false);
+        } else if (data.hasPhone) {
+          setEntryStage("choose-method");
+          setLoading(false);
         } else {
-          await sendOtp(targetEmail);
+          // If no phone is attached, fallback entirely to email flow immediately
+          await sendOtp(targetEmail, "email");
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong");
@@ -172,11 +192,11 @@ export default function OnboardingPage() {
       const res = await fetch("/api/auth/otp/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), token: otpCode.trim() }),
+        body: JSON.stringify({ email: email.trim(), code: otpCode.trim(), method: otpMethod }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Invalid code");
-      await onSessionEstablished(data.intern);
+      await onSessionEstablished(data.session?.user ? data.intern || state : data.intern);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -251,9 +271,52 @@ export default function OnboardingPage() {
             </>
           )}
 
+          {entryStage === "choose-method" && (
+            <>
+              <h1 className="mb-2 text-2xl font-bold">Verification Method</h1>
+              <p className="mb-6 text-slate-600">
+                How would you like to receive your one-time verification code?
+              </p>
+              
+              <div className="space-y-3 mb-6">
+                <button
+                  type="button"
+                  className="btn btn-primary w-full"
+                  onClick={() => sendOtp(email, "sms")}
+                  disabled={loading}
+                >
+                  {loading && otpMethod === "sms" ? "Sending..." : `Send SMS Code to ${phoneInfo.maskedPhone}`}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary w-full"
+                  onClick={() => sendOtp(email, "email")}
+                  disabled={loading}
+                >
+                  {loading && otpMethod === "email" ? "Sending..." : "Send Code via Email"}
+                </button>
+              </div>
+
+              {error && <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+              
+              <div className="text-center">
+                <button
+                  type="button"
+                  className="text-sm text-slate-500 hover:text-slate-700"
+                  onClick={() => {
+                    setEntryStage("email");
+                    setError(null);
+                  }}
+                >
+                  Use a different email
+                </button>
+              </div>
+            </>
+          )}
+
           {entryStage === "otp" && (
             <>
-              <h1 className="mb-2 text-2xl font-bold">Verify your email</h1>
+              <h1 className="mb-2 text-2xl font-bold">Verify your identity</h1>
               <p className="mb-6 text-slate-600">
                 {otpNotice ?? `We sent a verification code to ${email}.`} Enter it below to continue
                 setting up your account.
@@ -285,7 +348,7 @@ export default function OnboardingPage() {
                   <button
                     type="button"
                     className="font-semibold text-indigo-600"
-                    onClick={() => void sendOtp(email)}
+                    onClick={() => void sendOtp(email, otpMethod)}
                     disabled={loading}
                   >
                     Resend code
@@ -294,12 +357,16 @@ export default function OnboardingPage() {
                     type="button"
                     className="text-slate-500"
                     onClick={() => {
-                      setEntryStage("email");
+                      if (phoneInfo.hasPhone) {
+                        setEntryStage("choose-method");
+                      } else {
+                        setEntryStage("email");
+                      }
                       setOtpCode("");
                       setError(null);
                     }}
                   >
-                    Use a different email
+                    {phoneInfo.hasPhone ? "Change method" : "Use a different email"}
                   </button>
                 </div>
               </form>

@@ -12,7 +12,7 @@ export async function POST(request: Request) {
 
     if (!record) {
       return NextResponse.json(
-        { error: "No intern account found for this email. Sign up on the landing page first." },
+        { error: "No intern account found for this email. Sign up first." },
         { status: 404 }
       );
     }
@@ -20,12 +20,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Account is inactive." }, { status: 403 });
     }
 
-    return NextResponse.json({ hasPassword: Boolean(record.user.passwordHash) });
+    const phone = (record.intern as any).phone;
+    const maskedPhone = phone ? phone.replace(/.(?=.{4})/g, '*') : null;
+
+    return NextResponse.json({ 
+      hasPassword: Boolean(record.user.passwordHash),
+      hasPhone: Boolean(phone),
+      maskedPhone
+    });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.flatten() }, { status: 400 });
-    }
-    console.error("Check email error:", error);
+    if (error instanceof z.ZodError) return NextResponse.json({ error: error.flatten() }, { status: 400 });
     return NextResponse.json({ error: "Failed to check email" }, { status: 500 });
   }
 }
