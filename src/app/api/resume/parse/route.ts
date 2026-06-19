@@ -13,19 +13,25 @@ import {
 import { readFile } from "fs/promises";
 import path from "path";
 
+function guessMimeType(fileName: string): string {
+  if (fileName.endsWith(".pdf")) return "application/pdf";
+  if (fileName.endsWith(".docx"))
+    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (fileName.endsWith(".doc")) return "application/msword";
+  return "application/octet-stream";
+}
+
 async function loadLocalResumeFile(resumeUrl: string): Promise<File | null> {
   const marker = "/api/uploads/resumes/";
   const index = resumeUrl.indexOf(marker);
-  if (index === -1) return null;
+  if (index === -1) return null; // not a local file — it's in Supabase storage
 
   const fileName = resumeUrl.slice(index + marker.length);
   const filePath = path.join(process.cwd(), "uploads", "resumes", fileName);
 
   try {
     const buffer = await readFile(filePath);
-    return new File([buffer], fileName, {
-      type: "application/octet-stream",
-    });
+    return new File([buffer], fileName, { type: guessMimeType(fileName) });
   } catch {
     return null;
   }

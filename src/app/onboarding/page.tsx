@@ -1,3 +1,4 @@
+// src/app/onboarding/page.tsx
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -14,13 +15,19 @@ import {
 } from "@/lib/onboarding-steps";
 import type { OnboardingState, ProfileData } from "@/lib/types";
 
+type EntryStage = "email" | "password" | "otp";
+
 export default function OnboardingPage() {
   const searchParams = useSearchParams();
   const emailFromUrl = searchParams.get("email") ?? "";
 
   const [email, setEmail] = useState(emailFromUrl);
+  const [entryStage, setEntryStage] = useState<EntryStage>("email");
+  const [password, setPassword] = useState("");
+  const [otpCode, setOtpCode] = useState("");
   const [loading, setLoading] = useState(Boolean(emailFromUrl));
   const [error, setError] = useState<string | null>(null);
+  const [otpNotice, setOtpNotice] = useState<string | null>(null);
   const [state, setState] = useState<OnboardingState | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [activeStep, setActiveStep] = useState<StepId>("password");
@@ -43,39 +50,70 @@ export default function OnboardingPage() {
     return data.intern as OnboardingState;
   }, []);
 
-  const startSession = useCallback(
-    async (targetEmail: string) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await fetch("/api/auth/session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: targetEmail }),
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.error ?? "Could not start session");
-        }
-        setState(data.intern);
-        hasInitializedStep.current = false;
-        const intern = await refreshStatus();
-        if (intern) {
-          setActiveStep(getSuggestedStep(intern));
-          hasInitializedStep.current = true;
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Something went wrong");
-      } finally {
-        setLoading(false);
+  const onSessionEstablished = useCallback(
+    async (intern: OnboardingState) => {
+      setState(intern);
+      hasInitializedStep.current = false;
+      const refreshed = await refreshStatus();
+      if (refreshed) {
+        setActiveStep(getSuggestedStep(refreshed));
+        hasInitializedStep.current = true;
       }
     },
     [refreshStatus]
   );
 
+  const sendOtp = useCallback(async (targetEmail: string) => {
+    setLoading(true);
+    setError(null);
+    setOtpNotice(null);
+    try {
+      const res = await fetch("/api/auth/otp/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: targetEmail }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not send verification code");
+      setEntryStage("otp");
+      setOtpNotice(`We sent a verification code to ${targetEmail}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const checkEmail = useCallback(
+    async (targetEmail: string) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch("/api/auth/check-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: targetEmail }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Could not find that account");
+
+        if (data.hasPassword) {
+          setEntryStage("password");
+          setLoading(false);
+        } else {
+          await sendOtp(targetEmail);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Something went wrong");
+        setLoading(false);
+      }
+    },
+    [sendOtp]
+  );
+
   useEffect(() => {
     if (emailFromUrl) {
-      void startSession(emailFromUrl);
+      void checkEmail(emailFromUrl);
       return;
     }
     void refreshStatus()
@@ -87,7 +125,8 @@ export default function OnboardingPage() {
       })
       .catch(() => undefined)
       .finally(() => setLoading(false));
-  }, [emailFromUrl, refreshStatus, startSession]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const currentStepIndex = useMemo(
     () => ONBOARDING_STEPS.findIndex((step) => step.id === activeStep),
@@ -102,38 +141,170 @@ export default function OnboardingPage() {
   async function handleEmailSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (!email.trim()) return;
-    await startSession(email.trim());
+    await checkEmail(email.trim());
+  }
+
+  async function handlePasswordSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Incorrect password");
+      await onSessionEstablished(data.intern);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleOtpSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/auth/otp/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), token: otpCode.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Invalid code");
+      await onSessionEstablished(data.intern);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setLoading(false);
+    }
   }
 
   if (!state) {
     return (
       <main className="mx-auto flex min-h-screen max-w-lg items-center px-6 py-16">
         <div className="card w-full p-8">
-          <h1 className="mb-2 text-2xl font-bold">Welcome to KFIQ</h1>
-          <p className="mb-6 text-slate-600">
-            Enter the email you used on the landing page to continue registration.
-          </p>
-          <form onSubmit={handleEmailSubmit} className="space-y-4">
-            <div className="field">
-              <label htmlFor="email">Email</label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@college.edu"
-                required
-              />
-            </div>
-            {error && (
-              <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-                {error}
+          {entryStage === "email" && (
+            <>
+              <h1 className="mb-2 text-2xl font-bold">Welcome to KFIQ</h1>
+              <p className="mb-6 text-slate-600">
+                Enter the email you used on the landing page to continue registration.
               </p>
-            )}
-            <button type="submit" className="btn btn-primary w-full" disabled={loading}>
-              {loading ? "Checking..." : "Continue"}
-            </button>
-          </form>
+              <form onSubmit={handleEmailSubmit} className="space-y-4">
+                <div className="field">
+                  <label htmlFor="email">Email</label>
+                  <input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@college.edu"
+                    required
+                  />
+                </div>
+                {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+                <button type="submit" className="btn btn-primary w-full" disabled={loading}>
+                  {loading ? "Checking..." : "Continue"}
+                </button>
+              </form>
+            </>
+          )}
+
+          {entryStage === "password" && (
+            <>
+              <h1 className="mb-2 text-2xl font-bold">Welcome back</h1>
+              <p className="mb-6 text-slate-600">
+                Enter your password for <strong>{email}</strong>.
+              </p>
+              <form onSubmit={handlePasswordSubmit} className="space-y-4">
+                <div className="field">
+                  <label htmlFor="login-password">Password</label>
+                  <input
+                    id="login-password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    autoFocus
+                  />
+                </div>
+                {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+                <button type="submit" className="btn btn-primary w-full" disabled={loading}>
+                  {loading ? "Signing in..." : "Sign in"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary w-full"
+                  onClick={() => {
+                    setEntryStage("email");
+                    setPassword("");
+                    setError(null);
+                  }}
+                >
+                  Use a different email
+                </button>
+              </form>
+            </>
+          )}
+
+          {entryStage === "otp" && (
+            <>
+              <h1 className="mb-2 text-2xl font-bold">Verify your email</h1>
+              <p className="mb-6 text-slate-600">
+                {otpNotice ?? `We sent a verification code to ${email}.`} Enter it below to continue
+                setting up your account.
+              </p>
+              <form onSubmit={handleOtpSubmit} className="space-y-4">
+                <div className="field">
+                  <label htmlFor="otp">6-digit code</label>
+                  <input
+                    id="otp"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={6}
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                    placeholder="123456"
+                    required
+                    autoFocus
+                  />
+                </div>
+                {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+                <button
+                  type="submit"
+                  className="btn btn-primary w-full"
+                  disabled={loading || otpCode.length !== 6}
+                >
+                  {loading ? "Verifying..." : "Verify & continue"}
+                </button>
+                <div className="flex justify-between text-sm">
+                  <button
+                    type="button"
+                    className="font-semibold text-indigo-600"
+                    onClick={() => void sendOtp(email)}
+                    disabled={loading}
+                  >
+                    Resend code
+                  </button>
+                  <button
+                    type="button"
+                    className="text-slate-500"
+                    onClick={() => {
+                      setEntryStage("email");
+                      setOtpCode("");
+                      setError(null);
+                    }}
+                  >
+                    Use a different email
+                  </button>
+                </div>
+              </form>
+            </>
+          )}
         </div>
       </main>
     );
@@ -164,11 +335,7 @@ export default function OnboardingPage() {
               key={step.id}
               type="button"
               className={`step-nav ${
-                isActive
-                  ? "step-nav-active"
-                  : isComplete
-                    ? "step-nav-complete"
-                    : ""
+                isActive ? "step-nav-active" : isComplete ? "step-nav-complete" : ""
               }`}
               onClick={() => handleStepClick(step.id)}
               disabled={!isClickable}
@@ -214,12 +381,7 @@ export default function OnboardingPage() {
           />
         )}
         {activeStep === "profile" && profile && (
-          <StepProfile
-            profile={profile}
-            onChange={async () => {
-              await refreshStatus();
-            }}
-          />
+          <StepProfile profile={profile} onChange={async () => { await refreshStatus(); }} />
         )}
       </div>
     </main>

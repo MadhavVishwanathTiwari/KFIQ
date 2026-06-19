@@ -11,6 +11,21 @@ import {
   users,
 } from "@/lib/db/schema";
 
+import type { Intern, User } from "./schema";
+
+export function toOnboardingIntern(record: { intern: Intern; user: User }) {
+  return {
+    id: record.intern.id,
+    fullName: record.intern.fullName,
+    college: record.intern.college,
+    courseType: record.intern.courseType,
+    fieldOfInterest: record.intern.fieldOfInterest,
+    goal: record.intern.goal,
+    resumeParseStatus: record.intern.resumeParseStatus,
+    resumeUrl: record.intern.resumeUrl,
+    hasPassword: Boolean(record.user.passwordHash),
+  };
+}
 export async function getInternByEmail(email: string) {
   const rows = await db
     .select({

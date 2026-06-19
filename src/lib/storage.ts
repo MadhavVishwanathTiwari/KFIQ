@@ -4,9 +4,11 @@ import path from "path";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-export const supabase = createClient(supabaseUrl, supabaseKey);
-
 const LOCAL_UPLOAD_DIR = path.join(process.cwd(), "uploads", "resumes");
+
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: { persistSession: false },
+});
 
 export async function uploadResumeFile(
   internId: string,
