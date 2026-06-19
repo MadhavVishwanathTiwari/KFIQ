@@ -25,17 +25,14 @@ export default function OnboardingPage() {
   const [entryStage, setEntryStage] = useState<EntryStage>("email");
   const [password, setPassword] = useState("");
   const [otpCode, setOtpCode] = useState("");
-  const [loading, setLoading] = useState(Boolean(emailFromUrl));
-  const [isInitializing, setIsInitializing] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [otpNotice, setOtpNotice] = useState<string | null>(null);
+  
   const [state, setState] = useState<OnboardingState | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [activeStep, setActiveStep] = useState<StepId>("password");
   
-  const hasInitializedStep = useRef(false);
-
-  // Phone verification states
   const [phoneInfo, setPhoneInfo] = useState<{ hasPhone: boolean; maskedPhone: string | null }>({
     hasPhone: false,
     maskedPhone: null,
@@ -48,7 +45,6 @@ export default function OnboardingPage() {
       if (res.status === 401) {
         setState(null);
         setProfile(null);
-        hasInitializedStep.current = false;
         return;
       }
       throw new Error("Failed to load onboarding status");
@@ -62,11 +58,9 @@ export default function OnboardingPage() {
   const onSessionEstablished = useCallback(
     async (intern: OnboardingState) => {
       setState(intern);
-      hasInitializedStep.current = false;
       const refreshed = await refreshStatus();
       if (refreshed) {
         setActiveStep(getSuggestedStep(refreshed));
-        hasInitializedStep.current = true;
       }
     },
     [refreshStatus]
@@ -122,7 +116,6 @@ export default function OnboardingPage() {
           setEntryStage("choose-method");
           setLoading(false);
         } else {
-          // If no phone is attached, fallback entirely to email flow immediately
           await sendOtp(targetEmail, "email");
         }
       } catch (err) {
@@ -133,25 +126,13 @@ export default function OnboardingPage() {
     [sendOtp]
   );
 
+  // Auto-login removed. Everyone must explicitly authenticate to fetch their saved onboarding state.
   useEffect(() => {
     if (emailFromUrl) {
-      // Chain a finally to clear initializing state
-      checkEmail(emailFromUrl).finally(() => setIsInitializing(false));
-      return;
+      void checkEmail(emailFromUrl);
+    } else {
+      setLoading(false);
     }
-    
-    refreshStatus()
-      .then((intern) => {
-        if (intern && !hasInitializedStep.current) {
-          setActiveStep(getSuggestedStep(intern));
-          hasInitializedStep.current = true;
-        }
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        setLoading(false);
-        setIsInitializing(false); // Add this line
-      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -203,6 +184,8 @@ export default function OnboardingPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Invalid code");
+      
+      // Verification succeeded. Now we establish the session and retrieve their saved onboarding stage.
       await onSessionEstablished(data.session?.user ? data.intern || state : data.intern);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
