@@ -31,26 +31,37 @@ export async function POST(request: Request) {
     }
 
     if (method === "sms") {
-      const phone = (record.intern as any).phone;
-      if (!phone) {
-        return NextResponse.json({ error: "No phone number associated." }, { status: 400 });
+        const phone = (record.intern as any).phone;
+        if (!phone) {
+          return NextResponse.json({ error: "No phone number associated." }, { status: 400 });
+        }
+  
+        const response = await fetch("https://textlinksms.com/api/send-code", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${process.env.TEXTLINK_API_KEY}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ 
+            phone_number: phone,
+            service_name: "KFIQ" // This will make the SMS say: "Your KFIQ code is..."
+          })
+        });
+  
+        // Safely parse the response to prevent HTML parsing crashes
+        const responseText = await response.text();
+        let data;
+        try {
+          data = JSON.parse(responseText);
+        } catch (err) {
+          throw new Error(`TextLink API returned non-JSON response (${response.status}): ${responseText.substring(0, 100)}`);
+        }
+  
+        if (!data.ok) {
+          throw new Error(data.message || "Failed to trigger SMS via TextLink");
+        }
+        return NextResponse.json({ sent: true, method: "sms" });
       }
-
-      const response = await fetch("https://textlinksms.com/api/send-verification", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${process.env.TEXTLINK_API_KEY}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ phone_number: phone })
-      });
-
-      const data = await response.json();
-      if (!data.ok) {
-        throw new Error(data.message || "Failed to trigger SMS via TextLink");
-      }
-      return NextResponse.json({ sent: true, method: "sms" });
-    }
 
   } catch (error) {
     console.error("OTP send error:", error);
