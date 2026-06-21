@@ -8,8 +8,11 @@ export default function OnboardingLayout({
   return (
     <Suspense
       fallback={
-        <main className="mx-auto flex min-h-screen max-w-lg items-center px-6 py-16">
-          <p className="text-slate-600">Loading onboarding…</p>
+        <main className="flex min-h-screen items-center justify-center px-6">
+          <div className="flex items-center gap-3 text-sm text-zinc-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-zinc-300 animate-pulse" />
+            Loading…
+          </div>
         </main>
       }
     >

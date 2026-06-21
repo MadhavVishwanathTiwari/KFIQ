@@ -35,9 +35,8 @@ export function StepResume({ intern, onUploaded }: Props) {
         body: formData,
       });
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error ?? "Upload failed");
-      }
+      if (!res.ok) throw new Error(data.error ?? "Upload failed");
+
       setFile(null);
       await onUploaded();
     } catch (err) {
@@ -48,32 +47,37 @@ export function StepResume({ intern, onUploaded }: Props) {
   }
 
   return (
-    <section>
-      <h2 className="mb-2 text-xl font-bold">
-        {hasExistingResume ? "Replace your resume" : "Upload your resume"}
-      </h2>
-      <p className="mb-6 text-slate-600">
-        We&apos;ll parse your resume to pre-fill skills, education, and
-        experience. PDF or Word, up to 10 MB.
-        {hasExistingResume &&
-          " Uploading a new file will replace the current one and re-parse your profile."}
-      </p>
+    <section className="max-w-lg">
+      <div className="mb-7">
+        <span className="inline-block rounded-full bg-zinc-100 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-zinc-500">
+          Step 2
+        </span>
+        <h2 className="mt-3 font-display text-2xl font-bold tracking-tight text-[#0a0a0a]">
+          {hasExistingResume ? "Replace your resume" : "Upload your resume"}
+        </h2>
+        <p className="mt-2 text-sm leading-relaxed text-zinc-500">
+          We&apos;ll parse your resume to pre-fill skills, education, and
+          experience. PDF or Word, up to 10 MB.
+          {hasExistingResume &&
+            " Uploading a new file replaces the current one and re-parses your profile."}
+        </p>
+      </div>
 
       {hasExistingResume && (
-        <p className="mb-4 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
-          Current file:{" "}
+        <div className="mb-5 flex items-center gap-3 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm">
+          <span className="text-zinc-500">Current file:</span>
           <a
             href={intern.resumeUrl!}
             target="_blank"
             rel="noreferrer"
-            className="font-medium text-indigo-600 underline"
+            className="font-medium text-[#0a0a0a] underline underline-offset-2"
           >
-            View uploaded resume
+            View uploaded resume ↗
           </a>
-        </p>
+        </div>
       )}
 
-      <form onSubmit={handleSubmit} className="grid max-w-lg gap-4">
+      <form onSubmit={handleSubmit} className="space-y-4">
         <div className="field">
           <label htmlFor="resume">
             {hasExistingResume ? "New resume file" : "Resume file"}
@@ -87,16 +91,20 @@ export function StepResume({ intern, onUploaded }: Props) {
           />
         </div>
         {error && (
-          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
             {error}
           </p>
         )}
-        <button type="submit" className="btn btn-primary w-fit" disabled={loading}>
+        <button
+          type="submit"
+          className="btn btn-primary"
+          disabled={loading}
+        >
           {loading
-            ? "Uploading..."
+            ? "Uploading…"
             : hasExistingResume
-              ? "Upload new resume"
-              : "Upload & continue"}
+            ? "Upload new resume"
+            : "Upload & continue →"}
         </button>
       </form>
     </section>
