@@ -38,3 +38,5 @@ next-env.d.ts
 
 # local uploads when S3 is not configured
 /uploads
+
+kfiq_schema.sql
