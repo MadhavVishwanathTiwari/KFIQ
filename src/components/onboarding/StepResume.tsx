@@ -67,7 +67,7 @@ export function StepResume({ intern, onUploaded }: Props) {
         <div className="mb-5 flex items-center gap-3 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm">
           <span className="text-zinc-500">Current file:</span>
           <a
-            href={intern.resumeUrl!}
+            href="/api/resume/view"
             target="_blank"
             rel="noreferrer"
             className="font-medium text-[#0a0a0a] underline underline-offset-2"
