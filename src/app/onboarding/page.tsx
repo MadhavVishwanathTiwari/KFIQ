@@ -190,9 +190,7 @@ export default function OnboardingPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Invalid code");
-      await onSessionEstablished(
-        data.session?.user ? data.intern || state : data.intern
-      );
+      await onSessionEstablished(data.intern);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
