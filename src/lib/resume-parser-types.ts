@@ -19,11 +19,16 @@ export type ParsedResumeWorkExperience = {
   endDate?: string | null;
 };
 
-// Note: SharpAPI's parse_resume response has no projects field, so the resume
-// pipeline never populates projects. Projects are a manual-entry section only.
+export type ParsedResumeProject = {
+  title: string;
+  description?: string | null;
+  url?: string | null;
+};
+
 export type ParsedResumeData = {
   skills: ParsedResumeSkill[];
   certifications: string[];
   education: ParsedResumeEducation[];
   workExperience: ParsedResumeWorkExperience[];
+  projects: ParsedResumeProject[];
 };

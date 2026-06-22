@@ -150,8 +150,7 @@ export async function persistParsedResumeData(
     }
 
     // SharpAPI returns all work history as `positions`. For an intern-focused
-    // product these map to Past Internships. Projects are manual-only because
-    // SharpAPI's parse_resume response has no projects field.
+    // product these map to Past Internships.
     for (const exp of data.workExperience ?? []) {
       if (!exp.organization?.trim()) continue;
 
@@ -162,6 +161,18 @@ export async function persistParsedResumeData(
         startDate: dateOnly(exp.startDate),
         endDate: dateOnly(exp.endDate),
         description: exp.jobDescription?.trim() || null,
+        source: "resume",
+      });
+    }
+
+    for (const project of data.projects ?? []) {
+      if (!project.title?.trim()) continue;
+
+      await tx.insert(internProjects).values({
+        internId,
+        title: project.title.trim(),
+        description: project.description?.trim() || null,
+        projectUrl: project.url?.trim() || null,
         source: "resume",
       });
     }

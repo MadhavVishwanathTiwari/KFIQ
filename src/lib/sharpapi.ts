@@ -18,14 +18,21 @@ type SharpApiEducation = {
   end_date?: string | null;
 };
 
-// Mirrors the documented SharpAPI parse_resume "result" attributes. Note that
-// SharpAPI returns skills only nested inside positions, and has no projects
-// field — see https://sharpapi.com/en/catalog/ai/hr-tech/resume-cv-parsing
+type SharpApiProject = {
+  project_name?: string | null;
+  description?: string | null;
+  url?: string | null;
+};
+
+// Mirrors the SharpAPI parse_resume "result" attributes. Skills are returned
+// only nested inside positions. The `result` value itself arrives as a
+// JSON-encoded string (see coerceResult).
 type SharpApiResumeResult = {
   candidate_courses_and_certifications?: unknown[] | null;
   candidate_honors_and_awards?: string[] | null;
   positions?: SharpApiPosition[] | null;
   education_qualifications?: SharpApiEducation[] | null;
+  projects?: SharpApiProject[] | null;
 };
 
 type SharpApiJobResponse = {
@@ -37,11 +44,22 @@ type SharpApiStatusResponse = {
   data?: {
     attributes?: {
       status?: string;
-      result?: SharpApiResumeResult;
+      // SharpAPI returns the parsed payload as a JSON-encoded *string*, not an
+      // object — it must be JSON.parsed before mapping.
+      result?: SharpApiResumeResult | string;
       error?: string | null;
     };
   };
 };
+
+function coerceResult(
+  result: SharpApiResumeResult | string
+): SharpApiResumeResult {
+  if (typeof result === "string") {
+    return JSON.parse(result) as SharpApiResumeResult;
+  }
+  return result;
+}
 
 const SHARPAPI_BASE_URL =
   process.env.SHARPAPI_API_BASE_URL ?? "https://sharpapi.com";
@@ -107,6 +125,13 @@ export function mapSharpApiResult(result: SharpApiResumeResult): ParsedResumeDat
         startDate: dateOnly(position.start_date),
         endDate: dateOnly(position.end_date),
       })),
+    projects: (result.projects ?? [])
+      .filter((project) => project.project_name?.trim())
+      .map((project) => ({
+        title: project.project_name!.trim(),
+        description: project.description?.trim() || null,
+        url: project.url?.trim() || null,
+      })),
   };
 }
 
@@ -165,8 +190,7 @@ async function pollResumeJob(
     }
 
     if (status === "success" && attributes?.result) {
-      console.log("[SharpAPI] raw result:", JSON.stringify(attributes.result, null, 2));
-      return mapSharpApiResult(attributes.result);
+      return mapSharpApiResult(coerceResult(attributes.result));
     }
 
     await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -201,6 +225,13 @@ function mockParsedResumeData(): ParsedResumeData {
         jobDescription: "Built internal dashboards and REST APIs.",
         startDate: "2023-05-01",
         endDate: "2023-08-01",
+      },
+    ],
+    projects: [
+      {
+        title: "Portfolio Dashboard",
+        description: "A personal analytics dashboard built with Next.js.",
+        url: "https://example.com",
       },
     ],
   };
