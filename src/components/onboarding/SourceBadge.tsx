@@ -1,6 +1,16 @@
-export function SourceBadge({ source }: { source: "resume" | "manual" }) {
+export function SourceBadge({
+  source,
+  subtle = false,
+}: {
+  source: "resume" | "manual";
+  subtle?: boolean;
+}) {
   return (
-    <span className={`badge ${source === "resume" ? "badge-resume" : "badge-manual"}`}>
+    <span
+      className={`badge ${source === "resume" ? "badge-resume" : "badge-manual"}${
+        subtle ? " badge-sm" : ""
+      }`}
+    >
       {source}
     </span>
   );

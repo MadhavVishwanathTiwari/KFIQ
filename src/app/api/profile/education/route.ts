@@ -44,6 +44,47 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export async function PATCH(request: NextRequest) {
+  const session = await getSessionFromRequest(request);
+  if (!session) return unauthorizedResponse();
+
+  const id = request.nextUrl.searchParams.get("id");
+  if (!id) {
+    return NextResponse.json({ error: "Education id is required" }, { status: 400 });
+  }
+
+  try {
+    const body = bodySchema.parse(await request.json());
+    const [row] = await db
+      .update(internEducation)
+      .set({
+        institution: body.institution.trim(),
+        degree: body.degree?.trim() || null,
+        fieldOfStudy: body.fieldOfStudy?.trim() || null,
+        startYear: body.startYear ?? null,
+        endYear: body.endYear ?? null,
+        grade: body.grade?.trim() || null,
+        source: "manual",
+      })
+      .where(
+        sql`${internEducation.id} = ${id} AND ${internEducation.internId} = ${session.internId}`
+      )
+      .returning();
+
+    if (!row) {
+      return NextResponse.json({ error: "Education not found" }, { status: 404 });
+    }
+
+    return NextResponse.json(row);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: error.flatten() }, { status: 400 });
+    }
+    console.error("Update education error:", error);
+    return NextResponse.json({ error: "Failed to update education" }, { status: 500 });
+  }
+}
+
 export async function DELETE(request: NextRequest) {
   const session = await getSessionFromRequest(request);
   if (!session) return unauthorizedResponse();
@@ -56,7 +97,7 @@ export async function DELETE(request: NextRequest) {
   await db
     .delete(internEducation)
     .where(
-      sql`${internEducation.id} = ${id} AND ${internEducation.internId} = ${session.internId} AND ${internEducation.source} = 'manual'`
+      sql`${internEducation.id} = ${id} AND ${internEducation.internId} = ${session.internId}`
     );
 
   return NextResponse.json({ success: true });

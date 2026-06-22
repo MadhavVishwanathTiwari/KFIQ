@@ -42,6 +42,45 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export async function PATCH(request: NextRequest) {
+  const session = await getSessionFromRequest(request);
+  if (!session) return unauthorizedResponse();
+
+  const id = request.nextUrl.searchParams.get("id");
+  if (!id) {
+    return NextResponse.json({ error: "Certification id is required" }, { status: 400 });
+  }
+
+  try {
+    const body = bodySchema.parse(await request.json());
+    const [row] = await db
+      .update(internCertifications)
+      .set({
+        name: body.name.trim(),
+        issuingOrg: body.issuingOrg?.trim() || null,
+        // issuedDate/expiryDate/credentialUrl are not editable in the form;
+        // leave them untouched.
+        source: "manual",
+      })
+      .where(
+        sql`${internCertifications.id} = ${id} AND ${internCertifications.internId} = ${session.internId}`
+      )
+      .returning();
+
+    if (!row) {
+      return NextResponse.json({ error: "Certification not found" }, { status: 404 });
+    }
+
+    return NextResponse.json(row);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: error.flatten() }, { status: 400 });
+    }
+    console.error("Update certification error:", error);
+    return NextResponse.json({ error: "Failed to update certification" }, { status: 500 });
+  }
+}
+
 export async function DELETE(request: NextRequest) {
   const session = await getSessionFromRequest(request);
   if (!session) return unauthorizedResponse();
@@ -54,7 +93,7 @@ export async function DELETE(request: NextRequest) {
   await db
     .delete(internCertifications)
     .where(
-      sql`${internCertifications.id} = ${id} AND ${internCertifications.internId} = ${session.internId} AND ${internCertifications.source} = 'manual'`
+      sql`${internCertifications.id} = ${id} AND ${internCertifications.internId} = ${session.internId}`
     );
 
   return NextResponse.json({ success: true });

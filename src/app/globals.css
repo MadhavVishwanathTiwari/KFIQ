@@ -192,6 +192,17 @@ input, select, textarea, button { font: inherit; }
   border: 1px solid #e4e4e7;
 }
 
+/* Small, subdued tag variant (resume parsing preview) */
+.badge-sm {
+  padding: 0.05rem 0.4rem;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  background: #fafafa; /* zinc-50 */
+  color: #a1a1aa; /* zinc-400 */
+  border: 1px solid #ededf0;
+}
+
 /* Step nav */
 .step-nav {
   width: 100%;

@@ -42,6 +42,46 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export async function PATCH(request: NextRequest) {
+  const session = await getSessionFromRequest(request);
+  if (!session) return unauthorizedResponse();
+
+  const id = request.nextUrl.searchParams.get("id");
+  if (!id) {
+    return NextResponse.json({ error: "Internship id is required" }, { status: 400 });
+  }
+
+  try {
+    const body = bodySchema.parse(await request.json());
+    const [row] = await db
+      .update(internPastInternships)
+      .set({
+        company: body.company.trim(),
+        role: body.role?.trim() || null,
+        description: body.description?.trim() || null,
+        // startDate/endDate are not editable in the form; leave them untouched
+        // so resume-parsed dates are preserved.
+        source: "manual",
+      })
+      .where(
+        sql`${internPastInternships.id} = ${id} AND ${internPastInternships.internId} = ${session.internId}`
+      )
+      .returning();
+
+    if (!row) {
+      return NextResponse.json({ error: "Internship not found" }, { status: 404 });
+    }
+
+    return NextResponse.json(row);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: error.flatten() }, { status: 400 });
+    }
+    console.error("Update internship error:", error);
+    return NextResponse.json({ error: "Failed to update internship" }, { status: 500 });
+  }
+}
+
 export async function DELETE(request: NextRequest) {
   const session = await getSessionFromRequest(request);
   if (!session) return unauthorizedResponse();
@@ -54,7 +94,7 @@ export async function DELETE(request: NextRequest) {
   await db
     .delete(internPastInternships)
     .where(
-      sql`${internPastInternships.id} = ${id} AND ${internPastInternships.internId} = ${session.internId} AND ${internPastInternships.source} = 'manual'`
+      sql`${internPastInternships.id} = ${id} AND ${internPastInternships.internId} = ${session.internId}`
     );
 
   return NextResponse.json({ success: true });

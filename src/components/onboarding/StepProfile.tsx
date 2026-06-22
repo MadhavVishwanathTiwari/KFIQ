@@ -2,25 +2,30 @@
 
 import { useState } from "react";
 import type { ProfileData } from "@/lib/types";
-import { SourceBadge } from "@/components/onboarding/SourceBadge";
 
 type Props = {
   profile: ProfileData;
   onChange: () => Promise<void>;
 };
 
+type SubmitFn = (body: Record<string, unknown>) => Promise<unknown>;
+
 export function StepProfile({ profile, onChange }: Props) {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function postJson(url: string, body: Record<string, unknown>) {
+  async function sendJson(
+    url: string,
+    method: "POST" | "PATCH",
+    body: Record<string, unknown>
+  ) {
     setLoading(true);
     setError(null);
     setMessage(null);
     try {
       const res = await fetch(url, {
-        method: "POST",
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
@@ -36,6 +41,14 @@ export function StepProfile({ profile, onChange }: Props) {
     } finally {
       setLoading(false);
     }
+  }
+
+  // Bound helpers used by the sections below.
+  function addTo(url: string): SubmitFn {
+    return (body) => sendJson(url, "POST", body);
+  }
+  function editAt(url: string): SubmitFn {
+    return (body) => sendJson(url, "PATCH", body);
   }
 
   async function removeItem(url: string) {
@@ -65,11 +78,8 @@ export function StepProfile({ profile, onChange }: Props) {
           Enrich your profile
         </h2>
         <p className="mt-2 text-sm leading-relaxed text-zinc-500">
-          Add anything missing from your resume. Manual entries are stored with{" "}
-          <code className="rounded bg-zinc-100 px-1 text-xs font-mono text-zinc-600">
-            source = manual
-          </code>{" "}
-          and can be removed. Resume-parsed rows are read-only here.
+          Review what we pulled from your resume and add anything missing. Every
+          entry can be edited or removed.
         </p>
       </div>
 
@@ -92,65 +102,145 @@ export function StepProfile({ profile, onChange }: Props) {
       )}
 
       <ProfileSection title="Skills">
-        <SkillForm loading={loading} onSubmit={postJson} />
-        <ItemList
-          items={profile.skills.map((s) => ({
-            id: s.id,
-            label: s.name,
-            source: s.source,
-          }))}
+        <SkillForm loading={loading} onSubmit={addTo("/api/profile/skills")} />
+        <EditableList
+          items={profile.skills}
+          getLabel={(s) => s.name}
           onDelete={(id) => removeItem(`/api/profile/skills?id=${id}`)}
+          renderEdit={(s, done) => (
+            <SkillForm
+              loading={loading}
+              submitLabel="Save"
+              onCancel={done}
+              initialValues={{ name: s.name }}
+              onSubmit={async (body) => {
+                const saved = await editAt(`/api/profile/skills?id=${s.id}`)(body);
+                if (saved) done();
+                return saved;
+              }}
+            />
+          )}
         />
       </ProfileSection>
 
       <ProfileSection title="Certifications">
-        <CertificationForm loading={loading} onSubmit={postJson} />
-        <ItemList
-          items={profile.certifications.map((c) => ({
-            id: c.id,
-            label: c.issuingOrg ? `${c.name} — ${c.issuingOrg}` : c.name,
-            source: c.source,
-          }))}
+        <CertificationForm
+          loading={loading}
+          onSubmit={addTo("/api/profile/certifications")}
+        />
+        <EditableList
+          items={profile.certifications}
+          getLabel={(c) => (c.issuingOrg ? `${c.name} — ${c.issuingOrg}` : c.name)}
           onDelete={(id) => removeItem(`/api/profile/certifications?id=${id}`)}
+          renderEdit={(c, done) => (
+            <CertificationForm
+              loading={loading}
+              submitLabel="Save"
+              onCancel={done}
+              initialValues={{ name: c.name, issuingOrg: c.issuingOrg ?? "" }}
+              onSubmit={async (body) => {
+                const saved = await editAt(
+                  `/api/profile/certifications?id=${c.id}`
+                )(body);
+                if (saved) done();
+                return saved;
+              }}
+            />
+          )}
         />
       </ProfileSection>
 
       <ProfileSection title="Education">
-        <EducationForm loading={loading} onSubmit={postJson} />
-        <ItemList
-          items={profile.education.map((e) => ({
-            id: e.id,
-            label: [e.institution, e.degree].filter(Boolean).join(" — "),
-            source: e.source,
-          }))}
+        <EducationForm
+          loading={loading}
+          onSubmit={addTo("/api/profile/education")}
+        />
+        <EditableList
+          items={profile.education}
+          getLabel={(e) => [e.institution, e.degree].filter(Boolean).join(" — ")}
           onDelete={(id) => removeItem(`/api/profile/education?id=${id}`)}
+          renderEdit={(e, done) => (
+            <EducationForm
+              loading={loading}
+              submitLabel="Save"
+              onCancel={done}
+              initialValues={{
+                institution: e.institution,
+                degree: e.degree ?? "",
+                fieldOfStudy: e.fieldOfStudy ?? "",
+                startYear: e.startYear?.toString() ?? "",
+                endYear: e.endYear?.toString() ?? "",
+                grade: e.grade ?? "",
+              }}
+              onSubmit={async (body) => {
+                const saved = await editAt(
+                  `/api/profile/education?id=${e.id}`
+                )(body);
+                if (saved) done();
+                return saved;
+              }}
+            />
+          )}
         />
       </ProfileSection>
 
       <ProfileSection title="Past internships">
-        <InternshipForm loading={loading} onSubmit={postJson} />
-        <ItemList
-          items={profile.pastInternships.map((i) => ({
-            id: i.id,
-            label: [i.company, i.role].filter(Boolean).join(" — "),
-            source: i.source,
-          }))}
+        <InternshipForm
+          loading={loading}
+          onSubmit={addTo("/api/profile/internships")}
+        />
+        <EditableList
+          items={profile.pastInternships}
+          getLabel={(i) => [i.company, i.role].filter(Boolean).join(" — ")}
           onDelete={(id) => removeItem(`/api/profile/internships?id=${id}`)}
+          renderEdit={(i, done) => (
+            <InternshipForm
+              loading={loading}
+              submitLabel="Save"
+              onCancel={done}
+              initialValues={{
+                company: i.company,
+                role: i.role ?? "",
+                description: i.description ?? "",
+              }}
+              onSubmit={async (body) => {
+                const saved = await editAt(
+                  `/api/profile/internships?id=${i.id}`
+                )(body);
+                if (saved) done();
+                return saved;
+              }}
+            />
+          )}
         />
       </ProfileSection>
 
       <ProfileSection title="Projects">
-        <p className="-mt-1 text-sm text-zinc-400">
-          Resume parsing doesn&apos;t capture projects — add them here.
-        </p>
-        <ProjectForm loading={loading} onSubmit={postJson} />
-        <ItemList
-          items={profile.projects.map((p) => ({
-            id: p.id,
-            label: p.title,
-            source: p.source,
-          }))}
+        <ProjectForm loading={loading} onSubmit={addTo("/api/profile/projects")} />
+        <EditableList
+          items={profile.projects}
+          getLabel={(p) => p.title}
           onDelete={(id) => removeItem(`/api/profile/projects?id=${id}`)}
+          renderEdit={(p, done) => (
+            <ProjectForm
+              loading={loading}
+              submitLabel="Save"
+              onCancel={done}
+              initialValues={{
+                title: p.title,
+                description: p.description ?? "",
+                techStack: (p.techStack ?? []).join(", "),
+                projectUrl: p.projectUrl ?? "",
+              }}
+              onSubmit={async (body) => {
+                const saved = await editAt(
+                  `/api/profile/projects?id=${p.id}`
+                )(body);
+                if (saved) done();
+                return saved;
+              }}
+            />
+          )}
         />
       </ProfileSection>
 
@@ -189,17 +279,21 @@ function ProfileSection({
   );
 }
 
-function ItemList({
+function EditableList<T extends { id: string }>({
   items,
+  getLabel,
   onDelete,
+  renderEdit,
 }: {
-  items: { id: string; label: string; source: "resume" | "manual" }[];
+  items: T[];
+  getLabel: (item: T) => string;
   onDelete: (id: string) => void;
+  renderEdit: (item: T, done: () => void) => React.ReactNode;
 }) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+
   if (items.length === 0) {
-    return (
-      <p className="text-sm text-zinc-400 italic">No entries yet.</p>
-    );
+    return <p className="text-sm text-zinc-400 italic">No entries yet.</p>;
   }
 
   return (
@@ -207,20 +301,30 @@ function ItemList({
       {items.map((item) => (
         <li
           key={item.id}
-          className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-white px-3.5 py-2.5 text-sm"
+          className="rounded-lg border border-zinc-200 bg-white px-3.5 py-2.5 text-sm"
         >
-          <span className="flex items-center gap-2 min-w-0">
-            <span className="truncate text-[#0a0a0a]">{item.label}</span>
-            <SourceBadge source={item.source} />
-          </span>
-          {item.source === "manual" && (
-            <button
-              type="button"
-              className="flex-shrink-0 text-xs font-semibold text-zinc-400 hover:text-red-600 transition-colors"
-              onClick={() => onDelete(item.id)}
-            >
-              Remove
-            </button>
+          {editingId === item.id ? (
+            renderEdit(item, () => setEditingId(null))
+          ) : (
+            <div className="flex items-center justify-between gap-3">
+              <span className="truncate text-[#0a0a0a]">{getLabel(item)}</span>
+              <div className="flex flex-shrink-0 items-center gap-3">
+                <button
+                  type="button"
+                  className="text-xs font-semibold text-zinc-400 hover:text-[#0a0a0a] transition-colors"
+                  onClick={() => setEditingId(item.id)}
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  className="text-xs font-semibold text-zinc-400 hover:text-red-600 transition-colors"
+                  onClick={() => onDelete(item.id)}
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
           )}
         </li>
       ))}
@@ -229,24 +333,52 @@ function ItemList({
 }
 
 /* ------------------------------------------------------------------ */
-/* Sub-forms                                                            */
+/* Sub-forms — used for both adding and inline editing                  */
 /* ------------------------------------------------------------------ */
+
+type FormProps<V> = {
+  loading: boolean;
+  onSubmit: (body: Record<string, unknown>) => Promise<unknown>;
+  initialValues?: V;
+  submitLabel?: string;
+  onCancel?: () => void;
+};
+
+function CancelButton({
+  onCancel,
+  loading,
+}: {
+  onCancel?: () => void;
+  loading: boolean;
+}) {
+  if (!onCancel) return null;
+  return (
+    <button
+      type="button"
+      className="btn btn-secondary w-fit"
+      onClick={onCancel}
+      disabled={loading}
+    >
+      Cancel
+    </button>
+  );
+}
 
 function SkillForm({
   loading,
   onSubmit,
-}: {
-  loading: boolean;
-  onSubmit: (url: string, body: Record<string, unknown>) => Promise<unknown>;
-}) {
-  const [name, setName] = useState("");
+  initialValues,
+  submitLabel = "Add",
+  onCancel,
+}: FormProps<{ name: string }>) {
+  const [name, setName] = useState(initialValues?.name ?? "");
   return (
     <form
       className="flex gap-2"
       onSubmit={async (e) => {
         e.preventDefault();
-        const saved = await onSubmit("/api/profile/skills", { name });
-        if (saved) setName("");
+        const saved = await onSubmit({ name });
+        if (saved && !onCancel) setName("");
       }}
     >
       <div className="field flex-1">
@@ -263,8 +395,18 @@ function SkillForm({
         className="btn btn-secondary self-start mt-0"
         disabled={loading}
       >
-        Add
+        {submitLabel}
       </button>
+      {onCancel && (
+        <button
+          type="button"
+          className="btn btn-secondary self-start mt-0"
+          onClick={onCancel}
+          disabled={loading}
+        >
+          Cancel
+        </button>
+      )}
     </form>
   );
 }
@@ -272,22 +414,19 @@ function SkillForm({
 function CertificationForm({
   loading,
   onSubmit,
-}: {
-  loading: boolean;
-  onSubmit: (url: string, body: Record<string, unknown>) => Promise<unknown>;
-}) {
-  const [name, setName] = useState("");
-  const [issuingOrg, setIssuingOrg] = useState("");
+  initialValues,
+  submitLabel = "Add",
+  onCancel,
+}: FormProps<{ name: string; issuingOrg: string }>) {
+  const [name, setName] = useState(initialValues?.name ?? "");
+  const [issuingOrg, setIssuingOrg] = useState(initialValues?.issuingOrg ?? "");
   return (
     <form
       className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]"
       onSubmit={async (e) => {
         e.preventDefault();
-        const saved = await onSubmit("/api/profile/certifications", {
-          name,
-          issuingOrg,
-        });
-        if (saved) {
+        const saved = await onSubmit({ name, issuingOrg });
+        if (saved && !onCancel) {
           setName("");
           setIssuingOrg("");
         }
@@ -310,13 +449,25 @@ function CertificationForm({
           placeholder="Issuing org (optional)"
         />
       </div>
-      <button
-        type="submit"
-        className="btn btn-secondary self-start"
-        disabled={loading}
-      >
-        Add
-      </button>
+      <div className="flex gap-2">
+        <button
+          type="submit"
+          className="btn btn-secondary self-start"
+          disabled={loading}
+        >
+          {submitLabel}
+        </button>
+        {onCancel && (
+          <button
+            type="button"
+            className="btn btn-secondary self-start"
+            onClick={onCancel}
+            disabled={loading}
+          >
+            Cancel
+          </button>
+        )}
+      </div>
     </form>
   );
 }
@@ -324,23 +475,34 @@ function CertificationForm({
 function EducationForm({
   loading,
   onSubmit,
-}: {
-  loading: boolean;
-  onSubmit: (url: string, body: Record<string, unknown>) => Promise<unknown>;
-}) {
-  const [institution, setInstitution] = useState("");
-  const [degree, setDegree] = useState("");
-  const [fieldOfStudy, setFieldOfStudy] = useState("");
-  const [startYear, setStartYear] = useState("");
-  const [endYear, setEndYear] = useState("");
-  const [grade, setGrade] = useState("");
+  initialValues,
+  submitLabel = "Add education",
+  onCancel,
+}: FormProps<{
+  institution: string;
+  degree: string;
+  fieldOfStudy: string;
+  startYear: string;
+  endYear: string;
+  grade: string;
+}>) {
+  const [institution, setInstitution] = useState(
+    initialValues?.institution ?? ""
+  );
+  const [degree, setDegree] = useState(initialValues?.degree ?? "");
+  const [fieldOfStudy, setFieldOfStudy] = useState(
+    initialValues?.fieldOfStudy ?? ""
+  );
+  const [startYear, setStartYear] = useState(initialValues?.startYear ?? "");
+  const [endYear, setEndYear] = useState(initialValues?.endYear ?? "");
+  const [grade, setGrade] = useState(initialValues?.grade ?? "");
 
   return (
     <form
       className="grid gap-3 sm:grid-cols-2"
       onSubmit={async (e) => {
         e.preventDefault();
-        const saved = await onSubmit("/api/profile/education", {
+        const saved = await onSubmit({
           institution,
           degree,
           fieldOfStudy,
@@ -348,7 +510,7 @@ function EducationForm({
           endYear: endYear || undefined,
           grade,
         });
-        if (saved) {
+        if (saved && !onCancel) {
           setInstitution("");
           setDegree("");
           setFieldOfStudy("");
@@ -409,13 +571,12 @@ function EducationForm({
           placeholder="8.4 CGPA"
         />
       </div>
-      <button
-        type="submit"
-        className="btn btn-secondary w-fit"
-        disabled={loading}
-      >
-        Add education
-      </button>
+      <div className="flex gap-2 sm:col-span-2">
+        <button type="submit" className="btn btn-secondary w-fit" disabled={loading}>
+          {submitLabel}
+        </button>
+        <CancelButton onCancel={onCancel} loading={loading} />
+      </div>
     </form>
   );
 }
@@ -423,25 +584,23 @@ function EducationForm({
 function InternshipForm({
   loading,
   onSubmit,
-}: {
-  loading: boolean;
-  onSubmit: (url: string, body: Record<string, unknown>) => Promise<unknown>;
-}) {
-  const [company, setCompany] = useState("");
-  const [role, setRole] = useState("");
-  const [description, setDescription] = useState("");
+  initialValues,
+  submitLabel = "Add internship",
+  onCancel,
+}: FormProps<{ company: string; role: string; description: string }>) {
+  const [company, setCompany] = useState(initialValues?.company ?? "");
+  const [role, setRole] = useState(initialValues?.role ?? "");
+  const [description, setDescription] = useState(
+    initialValues?.description ?? ""
+  );
 
   return (
     <form
       className="grid gap-3 sm:grid-cols-2"
       onSubmit={async (e) => {
         e.preventDefault();
-        const saved = await onSubmit("/api/profile/internships", {
-          company,
-          role,
-          description,
-        });
-        if (saved) {
+        const saved = await onSubmit({ company, role, description });
+        if (saved && !onCancel) {
           setCompany("");
           setRole("");
           setDescription("");
@@ -474,13 +633,12 @@ function InternshipForm({
           placeholder="What did you do?"
         />
       </div>
-      <button
-        type="submit"
-        className="btn btn-secondary w-fit"
-        disabled={loading}
-      >
-        Add internship
-      </button>
+      <div className="flex gap-2 sm:col-span-2">
+        <button type="submit" className="btn btn-secondary w-fit" disabled={loading}>
+          {submitLabel}
+        </button>
+        <CancelButton onCancel={onCancel} loading={loading} />
+      </div>
     </form>
   );
 }
@@ -488,21 +646,28 @@ function InternshipForm({
 function ProjectForm({
   loading,
   onSubmit,
-}: {
-  loading: boolean;
-  onSubmit: (url: string, body: Record<string, unknown>) => Promise<unknown>;
-}) {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [techStack, setTechStack] = useState("");
-  const [projectUrl, setProjectUrl] = useState("");
+  initialValues,
+  submitLabel = "Add project",
+  onCancel,
+}: FormProps<{
+  title: string;
+  description: string;
+  techStack: string;
+  projectUrl: string;
+}>) {
+  const [title, setTitle] = useState(initialValues?.title ?? "");
+  const [description, setDescription] = useState(
+    initialValues?.description ?? ""
+  );
+  const [techStack, setTechStack] = useState(initialValues?.techStack ?? "");
+  const [projectUrl, setProjectUrl] = useState(initialValues?.projectUrl ?? "");
 
   return (
     <form
       className="grid gap-3 sm:grid-cols-2"
       onSubmit={async (e) => {
         e.preventDefault();
-        const saved = await onSubmit("/api/profile/projects", {
+        const saved = await onSubmit({
           title,
           description,
           techStack: techStack
@@ -513,7 +678,7 @@ function ProjectForm({
             : [],
           projectUrl,
         });
-        if (saved) {
+        if (saved && !onCancel) {
           setTitle("");
           setDescription("");
           setTechStack("");
@@ -556,13 +721,12 @@ function ProjectForm({
           placeholder="https://github.com/…"
         />
       </div>
-      <button
-        type="submit"
-        className="btn btn-secondary w-fit"
-        disabled={loading}
-      >
-        Add project
-      </button>
+      <div className="flex gap-2 sm:col-span-2">
+        <button type="submit" className="btn btn-secondary w-fit" disabled={loading}>
+          {submitLabel}
+        </button>
+        <CancelButton onCancel={onCancel} loading={loading} />
+      </div>
     </form>
   );
 }

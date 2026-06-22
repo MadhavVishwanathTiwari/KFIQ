@@ -128,7 +128,7 @@ export function StepParsing({ intern, profile, onComplete, onRetry }: Props) {
             {profile.skills.map((skill) => (
               <li key={skill.id} className="flex items-center gap-2">
                 <span>{skill.name}</span>
-                <SourceBadge source={skill.source} />
+                <SourceBadge source={skill.source} subtle />
               </li>
             ))}
           </PreviewSection>
@@ -139,7 +139,7 @@ export function StepParsing({ intern, profile, onComplete, onRetry }: Props) {
                   {edu.institution}
                   {edu.degree ? ` — ${edu.degree}` : ""}
                 </span>
-                <SourceBadge source={edu.source} />
+                <SourceBadge source={edu.source} subtle />
               </li>
             ))}
           </PreviewSection>
