@@ -66,11 +66,6 @@ async function findOrCreateSkillId(
   return fallback[0].id;
 }
 
-function isInternshipRole(title?: string | null): boolean {
-  if (!title) return false;
-  return /intern/i.test(title);
-}
-
 export async function clearResumeSourcedProfile(internId: string) {
   await db.transaction(async (tx) => {
     await tx
@@ -154,46 +149,19 @@ export async function persistParsedResumeData(
       });
     }
 
+    // SharpAPI returns all work history as `positions`. For an intern-focused
+    // product these map to Past Internships. Projects are manual-only because
+    // SharpAPI's parse_resume response has no projects field.
     for (const exp of data.workExperience ?? []) {
       if (!exp.organization?.trim()) continue;
 
-      const role = exp.jobTitle?.trim() ?? null;
-      const common = {
+      await tx.insert(internPastInternships).values({
         internId,
         company: exp.organization.trim(),
-        role,
+        role: exp.jobTitle?.trim() || null,
         startDate: dateOnly(exp.startDate),
         endDate: dateOnly(exp.endDate),
-        description: exp.jobDescription?.trim() ?? null,
-        source: "resume" as const,
-      };
-
-      if (isInternshipRole(role)) {
-        await tx.insert(internPastInternships).values(common);
-      } else {
-        await tx.insert(internProjects).values({
-          internId,
-          title: role ?? exp.organization.trim(),
-          description: exp.jobDescription?.trim() ?? null,
-          techStack: null,
-          projectUrl: null,
-          startDate: common.startDate,
-          endDate: common.endDate,
-          source: "resume",
-        });
-      }
-    }
-
-    for (const project of data.projects ?? []) {
-      if (!project.title?.trim()) continue;
-      await tx.insert(internProjects).values({
-        internId,
-        title: project.title.trim(),
-        description: project.description?.trim() ?? null,
-        techStack: project.techStack?.length ? project.techStack : null,
-        projectUrl: project.projectUrl?.trim() || null,
-        startDate: dateOnly(project.startDate),
-        endDate: dateOnly(project.endDate),
+        description: exp.jobDescription?.trim() || null,
         source: "resume",
       });
     }

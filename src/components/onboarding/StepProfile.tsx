@@ -140,6 +140,9 @@ export function StepProfile({ profile, onChange }: Props) {
       </ProfileSection>
 
       <ProfileSection title="Projects">
+        <p className="-mt-1 text-sm text-zinc-400">
+          Resume parsing doesn&apos;t capture projects — add them here.
+        </p>
         <ProjectForm loading={loading} onSubmit={postJson} />
         <ItemList
           items={profile.projects.map((p) => ({

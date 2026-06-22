@@ -10,26 +10,21 @@ type SharpApiPosition = {
   job_details?: string | null;
 };
 
-type SharpApiProject = {
-  project_name?: string | null;
-  description?: string | null;
-  url?: string | null;
-};
-
 type SharpApiEducation = {
   school_name?: string | null;
   degree_type?: string | null;
   specialization_subjects?: string | null;
   start_date?: string | null;
   end_date?: string | null;
-  education_details?: string | null;
 };
 
+// Mirrors the documented SharpAPI parse_resume "result" attributes. Note that
+// SharpAPI returns skills only nested inside positions, and has no projects
+// field — see https://sharpapi.com/en/catalog/ai/hr-tech/resume-cv-parsing
 type SharpApiResumeResult = {
   candidate_courses_and_certifications?: unknown[] | null;
   candidate_honors_and_awards?: string[] | null;
   positions?: SharpApiPosition[] | null;
-  projects?: SharpApiProject[] | null;
   education_qualifications?: SharpApiEducation[] | null;
 };
 
@@ -101,7 +96,7 @@ export function mapSharpApiResult(result: SharpApiResumeResult): ParsedResumeDat
         fieldOfStudy: edu.specialization_subjects?.trim() || null,
         startDate: dateOnly(edu.start_date),
         endDate: dateOnly(edu.end_date),
-        grade: edu.education_details?.trim() || null,
+        grade: null,
       })),
     workExperience: (result.positions ?? [])
       .filter((position) => position.company_name?.trim())
@@ -111,16 +106,6 @@ export function mapSharpApiResult(result: SharpApiResumeResult): ParsedResumeDat
         jobDescription: position.job_details?.trim() || null,
         startDate: dateOnly(position.start_date),
         endDate: dateOnly(position.end_date),
-      })),
-    projects: (result.projects ?? [])
-      .filter((project) => project.project_name?.trim())
-      .map((project) => ({
-        title: project.project_name!.trim(),
-        description: project.description?.trim() || null,
-        techStack: null,
-        projectUrl: project.url?.trim() || null,
-        startDate: null,
-        endDate: null,
       })),
   };
 }
@@ -215,16 +200,6 @@ function mockParsedResumeData(): ParsedResumeData {
         jobDescription: "Built internal dashboards and REST APIs.",
         startDate: "2023-05-01",
         endDate: "2023-08-01",
-      },
-    ],
-    projects: [
-      {
-        title: "Internship Task Tracker",
-        description: "A full-stack app for managing intern deliverables.",
-        techStack: ["React", "PostgreSQL"],
-        projectUrl: null,
-        startDate: null,
-        endDate: null,
       },
     ],
   };
