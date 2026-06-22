@@ -144,13 +144,21 @@ export function StepParsing({ intern, profile, onComplete, onRetry }: Props) {
             ))}
           </PreviewSection>
 
-          <div className="pt-2">
+          <div className="pt-2 flex items-center gap-3">
             <button
               type="button"
               className="btn btn-primary"
               onClick={() => void onComplete()}
             >
               Continue to profile →
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => void triggerParse()}
+              disabled={loading}
+            >
+              Re-parse resume
             </button>
           </div>
         </div>

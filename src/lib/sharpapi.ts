@@ -112,7 +112,7 @@ export function mapSharpApiResult(result: SharpApiResumeResult): ParsedResumeDat
 
 async function submitResumeJob(file: File, apiKey: string): Promise<string> {
   const formData = new FormData();
-  formData.append("file", file);
+  formData.append("cv", file);
   formData.append("language", "English");
 
   const response = await fetch(`${SHARPAPI_BASE_URL}/api/v1/hr/parse_resume`, {
@@ -165,6 +165,7 @@ async function pollResumeJob(
     }
 
     if (status === "success" && attributes?.result) {
+      console.log("[SharpAPI] raw result:", JSON.stringify(attributes.result, null, 2));
       return mapSharpApiResult(attributes.result);
     }
 

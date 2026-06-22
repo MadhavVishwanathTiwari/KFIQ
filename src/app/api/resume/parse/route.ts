@@ -60,13 +60,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (record.intern.resumeParseStatus === "done") {
-      return NextResponse.json({
-        resumeParseStatus: "done",
-        message: "Resume already parsed",
-      });
-    }
-
     if (record.intern.resumeParseStatus === "processing") {
       return NextResponse.json({
         resumeParseStatus: "processing",
