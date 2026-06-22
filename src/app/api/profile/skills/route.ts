@@ -109,6 +109,23 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Failed to save skill" }, { status: 500 });
     }
 
+    // Renaming to a skill the intern already has would violate the
+    // (intern_id, skill_id) unique constraint — surface a friendly message.
+    const duplicate = await db
+      .select({ id: internSkills.id })
+      .from(internSkills)
+      .where(
+        sql`${internSkills.internId} = ${session.internId} AND ${internSkills.skillId} = ${skillId} AND ${internSkills.id} <> ${id}`
+      )
+      .limit(1);
+
+    if (duplicate[0]) {
+      return NextResponse.json(
+        { error: "You already have that skill" },
+        { status: 409 }
+      );
+    }
+
     const [row] = await db
       .update(internSkills)
       .set({ skillId, source: "manual" })
