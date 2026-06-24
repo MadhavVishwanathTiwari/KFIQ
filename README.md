@@ -1,2 +1,0 @@
-# KFIQ Dashboard
-
