@@ -131,6 +131,9 @@ export const interns = pgTable(
       .notNull()
       .default("not_uploaded"),
     resumeParsedAt: timestamp("resume_parsed_at", { withTimezone: true }),
+    onboardingCompletedAt: timestamp("onboarding_completed_at", {
+      withTimezone: true,
+    }),
     isTaskOverseer: boolean("is_task_overseer").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -251,3 +254,4 @@ export const internProjects = pgTable(
 export type User = typeof users.$inferSelect;
 export type Intern = typeof interns.$inferSelect;
 export type Skill = typeof skills.$inferSelect;
+export type CourseType = (typeof courseTypeEnum.enumValues)[number];

@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { setSessionCookie } from "@/lib/auth";
+import { clearSessionCookie, setSessionCookie } from "@/lib/auth";
 import { getInternByEmail } from "@/lib/db/queries";
 
 const bodySchema = z.object({
   email: z.string().email(),
 });
+
+// Sign out — clears the onboarding session cookie.
+export async function DELETE() {
+  await clearSessionCookie();
+  return NextResponse.json({ ok: true });
+}
 
 export async function POST(request: Request) {
   try {

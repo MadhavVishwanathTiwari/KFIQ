@@ -16,6 +16,7 @@ export type OnboardingState = {
   resumeUrl: string | null;
   resumeParsedAt?: string | null;
   hasPassword: boolean;
+  onboardingCompletedAt?: string | null;
 };
 
 export type ProfileSkill = {

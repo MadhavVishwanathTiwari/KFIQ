@@ -1,6 +1,8 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
+  campusAmbassadors,
+  cohorts,
   internCertifications,
   internEducation,
   internPastInternships,
@@ -11,7 +13,7 @@ import {
   users,
 } from "@/lib/db/schema";
 
-import type { Intern, User } from "./schema";
+import type { CourseType, Intern, User } from "./schema";
 
 export function toOnboardingIntern(record: { intern: Intern; user: User }) {
   return {
@@ -24,6 +26,9 @@ export function toOnboardingIntern(record: { intern: Intern; user: User }) {
     resumeParseStatus: record.intern.resumeParseStatus,
     resumeUrl: record.intern.resumeUrl,
     hasPassword: Boolean(record.user.passwordHash),
+    onboardingCompletedAt: record.intern.onboardingCompletedAt
+      ? record.intern.onboardingCompletedAt.toISOString()
+      : null,
   };
 }
 export async function getInternByEmail(email: string) {
@@ -100,4 +105,74 @@ export async function setUserPassword(userId: string, passwordHash: string) {
     .update(users)
     .set({ passwordHash, updatedAt: new Date() })
     .where(eq(users.id, userId));
+}
+
+export async function getAmbassadorByReferralCode(referralCode: string) {
+  const rows = await db
+    .select()
+    .from(campusAmbassadors)
+    .where(eq(campusAmbassadors.referralCode, referralCode.trim().toUpperCase()))
+    .limit(1);
+
+  return rows[0] ?? null;
+}
+
+async function getActiveCohortId(): Promise<string | null> {
+  const rows = await db
+    .select({ id: cohorts.id })
+    .from(cohorts)
+    .where(eq(cohorts.isActive, true))
+    .limit(1);
+
+  return rows[0]?.id ?? null;
+}
+
+export type NewInternInput = {
+  email: string;
+  fullName: string;
+  college: string;
+  courseType: CourseType;
+  fieldOfInterest: string;
+  goal: string;
+  referredBy?: string | null;
+};
+
+/**
+ * Creates a brand-new intern (user + intern rows) for in-app signup. The user
+ * is created without a password — the password is set later in onboarding's
+ * first step. Returns the same shape as getInternByEmail.
+ */
+export async function createIntern(input: NewInternInput) {
+  const email = input.email.toLowerCase();
+  const cohortId = await getActiveCohortId();
+
+  return db.transaction(async (tx) => {
+    const [user] = await tx
+      .insert(users)
+      .values({ email, role: "intern" })
+      .returning();
+
+    const [intern] = await tx
+      .insert(interns)
+      .values({
+        userId: user.id,
+        fullName: input.fullName,
+        college: input.college,
+        courseType: input.courseType,
+        fieldOfInterest: input.fieldOfInterest,
+        goal: input.goal,
+        cohortId,
+        referredBy: input.referredBy ?? null,
+      })
+      .returning();
+
+    return { intern, user };
+  });
+}
+
+export async function markOnboardingComplete(internId: string) {
+  await db
+    .update(interns)
+    .set({ onboardingCompletedAt: new Date(), updatedAt: new Date() })
+    .where(eq(interns.id, internId));
 }

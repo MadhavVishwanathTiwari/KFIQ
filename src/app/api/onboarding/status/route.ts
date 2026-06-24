@@ -25,6 +25,9 @@ export async function GET(request: NextRequest) {
       resumeUrl: record.intern.resumeUrl,
       resumeParsedAt: record.intern.resumeParsedAt,
       hasPassword: Boolean(record.user.passwordHash),
+      onboardingCompletedAt: record.intern.onboardingCompletedAt
+        ? record.intern.onboardingCompletedAt.toISOString()
+        : null,
     },
     profile,
   });

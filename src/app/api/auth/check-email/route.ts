@@ -10,11 +10,9 @@ export async function POST(request: Request) {
     const { email } = bodySchema.parse(await request.json());
     const record = await getInternByEmail(email);
 
+    // Unknown email is not an error — the client branches into in-app signup.
     if (!record) {
-      return NextResponse.json(
-        { error: "No intern account found for this email. Sign up first." },
-        { status: 404 }
-      );
+      return NextResponse.json({ exists: false });
     }
     if (!record.user.isActive) {
       return NextResponse.json({ error: "Account is inactive." }, { status: 403 });
@@ -23,7 +21,8 @@ export async function POST(request: Request) {
     const phone = (record.intern as any).phone;
     const maskedPhone = phone ? phone.replace(/.(?=.{4})/g, '*') : null;
 
-    return NextResponse.json({ 
+    return NextResponse.json({
+      exists: true,
       hasPassword: Boolean(record.user.passwordHash),
       hasPhone: Boolean(phone),
       maskedPhone
