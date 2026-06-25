@@ -1,9 +1,12 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
-  date,
+  check,
   index,
+  date,
   pgEnum,
   pgTable,
+  primaryKey,
   smallint,
   text,
   timestamp,
@@ -45,6 +48,26 @@ export const resumeParseStatusEnum = pgEnum("resume_parse_status", [
 export const profileDataSourceEnum = pgEnum("profile_data_source", [
   "resume",
   "manual",
+]);
+
+export const applicationStatusEnum = pgEnum("application_status", [
+  "pending",
+  "approved",
+  "rejected",
+]);
+
+export const taskAssignmentStatusEnum = pgEnum("task_assignment_status", [
+  "not_started",
+  "in_progress",
+  "submitted",
+  "approved",
+  "rejected",
+]);
+
+export const submissionReviewStatusEnum = pgEnum("submission_review_status", [
+  "pending",
+  "approved",
+  "rejected",
 ]);
 
 export const users = pgTable(
@@ -251,7 +274,301 @@ export const internProjects = pgTable(
   (table) => [index("idx_intern_projects_intern").on(table.internId)]
 );
 
+/* ================================================================== */
+/* TASK GROUPS / SUBGROUPS / TASKS                                     */
+/* ================================================================== */
+
+export const taskGroups = pgTable(
+  "task_groups",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    cohortId: uuid("cohort_id").references(() => cohorts.id, {
+      onDelete: "set null",
+    }),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id),
+    title: text("title").notNull(),
+    description: text("description"),
+    field: text("field").notNull(),
+    isOpen: boolean("is_open").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_task_groups_cohort").on(table.cohortId),
+    index("idx_task_groups_field").on(table.field),
+  ]
+);
+
+export const taskGroupSkills = pgTable(
+  "task_group_skills",
+  {
+    taskGroupId: uuid("task_group_id")
+      .notNull()
+      .references(() => taskGroups.id, { onDelete: "cascade" }),
+    skillId: uuid("skill_id")
+      .notNull()
+      .references(() => skills.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.taskGroupId, table.skillId] }),
+  ]
+);
+
+export const taskSubgroups = pgTable(
+  "task_subgroups",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    taskGroupId: uuid("task_group_id")
+      .notNull()
+      .references(() => taskGroups.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    description: text("description"),
+    sequenceOrder: smallint("sequence_order").notNull().default(1),
+    canRunConcurrent: boolean("can_run_concurrent").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_task_subgroups_group").on(table.taskGroupId, table.sequenceOrder),
+  ]
+);
+
+export const tasks = pgTable(
+  "tasks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    taskGroupId: uuid("task_group_id").references(() => taskGroups.id, {
+      onDelete: "cascade",
+    }),
+    taskSubgroupId: uuid("task_subgroup_id").references(() => taskSubgroups.id, {
+      onDelete: "cascade",
+    }),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id),
+    title: text("title").notNull(),
+    description: text("description"),
+    field: text("field"),
+    requiredSkills: uuid("required_skills").array(),
+    sequenceOrder: smallint("sequence_order").notNull().default(1),
+    canRunConcurrent: boolean("can_run_concurrent").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_tasks_group").on(table.taskGroupId),
+    index("idx_tasks_subgroup").on(table.taskSubgroupId),
+    // A task must belong to exactly one parent — group OR subgroup, never both.
+    check(
+      "task_parent_check",
+      sql`(${table.taskGroupId} IS NOT NULL AND ${table.taskSubgroupId} IS NULL)
+        OR (${table.taskGroupId} IS NULL AND ${table.taskSubgroupId} IS NOT NULL)`
+    ),
+  ]
+);
+
+/* ================================================================== */
+/* APPLICATIONS / ASSIGNMENTS / SUBMISSIONS / FEEDBACK                 */
+/* ================================================================== */
+
+export const applications = pgTable(
+  "applications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    internId: uuid("intern_id")
+      .notNull()
+      .references(() => interns.id, { onDelete: "cascade" }),
+    taskGroupId: uuid("task_group_id")
+      .notNull()
+      .references(() => taskGroups.id, { onDelete: "cascade" }),
+    status: applicationStatusEnum("status").notNull().default("pending"),
+    appliedAt: timestamp("applied_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    reviewedBy: uuid("reviewed_by").references(() => users.id),
+    rejectionNote: text("rejection_note"),
+  },
+  (table) => [
+    unique("applications_intern_id_task_group_id").on(
+      table.internId,
+      table.taskGroupId
+    ),
+    index("idx_applications_intern").on(table.internId),
+    index("idx_applications_group").on(table.taskGroupId),
+    index("idx_applications_status").on(table.status),
+  ]
+);
+
+export const internTaskAssignments = pgTable(
+  "intern_task_assignments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    applicationId: uuid("application_id")
+      .notNull()
+      .references(() => applications.id, { onDelete: "cascade" }),
+    internId: uuid("intern_id")
+      .notNull()
+      .references(() => interns.id, { onDelete: "cascade" }),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    assignedBy: uuid("assigned_by")
+      .notNull()
+      .references(() => users.id),
+    status: taskAssignmentStatusEnum("status").notNull().default("not_started"),
+    assignedAt: timestamp("assigned_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    // One intern per task (no two interns on the same task).
+    unique("intern_task_assignments_task_id").on(table.taskId),
+    unique("intern_task_assignments_intern_id_task_id").on(
+      table.internId,
+      table.taskId
+    ),
+    index("idx_assignments_intern").on(table.internId),
+    index("idx_assignments_task").on(table.taskId),
+    index("idx_assignments_application").on(table.applicationId),
+    index("idx_assignments_status").on(table.status),
+  ]
+);
+
+export const taskSubmissions = pgTable(
+  "task_submissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    assignmentId: uuid("assignment_id")
+      .notNull()
+      .references(() => internTaskAssignments.id, { onDelete: "cascade" }),
+    internId: uuid("intern_id")
+      .notNull()
+      .references(() => interns.id, { onDelete: "cascade" }),
+    notes: text("notes"),
+    attachmentUrls: text("attachment_urls").array(),
+    submittedAt: timestamp("submitted_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    reviewStatus: submissionReviewStatusEnum("review_status")
+      .notNull()
+      .default("pending"),
+    reviewedBy: uuid("reviewed_by").references(() => users.id),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  },
+  (table) => [
+    // Only one active submission per assignment at a time.
+    unique("task_submissions_assignment_id").on(table.assignmentId),
+    index("idx_submissions_assignment").on(table.assignmentId),
+    index("idx_submissions_intern").on(table.internId),
+    index("idx_submissions_status").on(table.reviewStatus),
+  ]
+);
+
+export const taskFeedback = pgTable(
+  "task_feedback",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    submissionId: uuid("submission_id")
+      .notNull()
+      .references(() => taskSubmissions.id, { onDelete: "cascade" }),
+    givenBy: uuid("given_by")
+      .notNull()
+      .references(() => users.id),
+    feedbackText: text("feedback_text").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("idx_feedback_submission").on(table.submissionId)]
+);
+
+/* ================================================================== */
+/* CERTIFICATES                                                        */
+/* ================================================================== */
+
+export const certificates = pgTable(
+  "certificates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    internId: uuid("intern_id")
+      .notNull()
+      .references(() => interns.id, { onDelete: "cascade" }),
+    taskGroupId: uuid("task_group_id")
+      .notNull()
+      .references(() => taskGroups.id, { onDelete: "cascade" }),
+    issuedBy: uuid("issued_by")
+      .notNull()
+      .references(() => users.id),
+    issuedAt: timestamp("issued_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    verifyToken: uuid("verify_token").notNull().unique().defaultRandom(),
+    qrCodeUrl: text("qr_code_url"),
+    pdfUrl: text("pdf_url"),
+    isRevoked: boolean("is_revoked").notNull().default(false),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revokeReason: text("revoke_reason"),
+  },
+  (table) => [
+    unique("certificates_intern_id_task_group_id").on(
+      table.internId,
+      table.taskGroupId
+    ),
+    index("idx_certificates_intern").on(table.internId),
+    index("idx_certificates_task_group").on(table.taskGroupId),
+    index("idx_certificates_verify_token").on(table.verifyToken),
+  ]
+);
+
+/* ================================================================== */
+/* ADMIN ALLOWLIST  (manually managed — gates who may become admin)    */
+/* ================================================================== */
+
+export const adminAllowlist = pgTable("admin_allowlist", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").notNull().unique(),
+  note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export type User = typeof users.$inferSelect;
 export type Intern = typeof interns.$inferSelect;
 export type Skill = typeof skills.$inferSelect;
 export type CourseType = (typeof courseTypeEnum.enumValues)[number];
+export type TaskGroup = typeof taskGroups.$inferSelect;
+export type TaskSubgroup = typeof taskSubgroups.$inferSelect;
+export type Task = typeof tasks.$inferSelect;
+export type Application = typeof applications.$inferSelect;
+export type InternTaskAssignment = typeof internTaskAssignments.$inferSelect;
+export type TaskSubmission = typeof taskSubmissions.$inferSelect;
+export type TaskFeedback = typeof taskFeedback.$inferSelect;
+export type Certificate = typeof certificates.$inferSelect;
+export type AdminAllowlistEntry = typeof adminAllowlist.$inferSelect;
+export type ApplicationStatus = (typeof applicationStatusEnum.enumValues)[number];
+export type TaskAssignmentStatus =
+  (typeof taskAssignmentStatusEnum.enumValues)[number];
+export type SubmissionReviewStatus =
+  (typeof submissionReviewStatusEnum.enumValues)[number];
