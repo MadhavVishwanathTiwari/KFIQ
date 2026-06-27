@@ -7,6 +7,8 @@ import type {
 
 export type AdminSkill = { id: string; name: string; category: string | null };
 
+export type AdminCohort = { id: string; name: string; isActive: boolean };
+
 export type TaskGroupListItem = {
   id: string;
   title: string;

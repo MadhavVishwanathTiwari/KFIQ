@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { EmptyState } from "@/components/dashboard/primitives";
-import type { TaskGroupListItem } from "@/lib/admin-types";
+import { SkillTagInput } from "@/components/admin/SkillTagInput";
+import type { AdminCohort, TaskGroupListItem } from "@/lib/admin-types";
 
 export default function TaskGroupsPage() {
   const [groups, setGroups] = useState<TaskGroupListItem[]>([]);
@@ -90,9 +91,24 @@ function NewTaskGroupForm({ onCreated }: { onCreated: () => void }) {
   const [title, setTitle] = useState("");
   const [field, setField] = useState("");
   const [description, setDescription] = useState("");
-  const [skillsText, setSkillsText] = useState("");
+  const [skills, setSkills] = useState<string[]>([]);
+  const [cohorts, setCohorts] = useState<AdminCohort[]>([]);
+  const [cohortId, setCohortId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/admin/cohorts")
+      .then((r) => r.json())
+      .then((data) => {
+        const list: AdminCohort[] = data.cohorts ?? [];
+        setCohorts(list);
+        // Default to the first active cohort, if any.
+        const active = list.find((c) => c.isActive);
+        if (active) setCohortId(active.id);
+      })
+      .catch(() => {});
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -100,16 +116,12 @@ function NewTaskGroupForm({ onCreated }: { onCreated: () => void }) {
     setError(null);
     try {
       // Resolve skill names → ids (creating any new ones) before creating the group.
-      const names = skillsText
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
       let skillIds: string[] = [];
-      if (names.length > 0) {
+      if (skills.length > 0) {
         const res = await fetch("/api/admin/skills", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ names }),
+          body: JSON.stringify({ names: skills }),
         });
         const data = await res.json();
         skillIds = data.skillIds ?? [];
@@ -118,7 +130,13 @@ function NewTaskGroupForm({ onCreated }: { onCreated: () => void }) {
       const res = await fetch("/api/admin/task-groups", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, field, description, skillIds }),
+        body: JSON.stringify({
+          title,
+          field,
+          description,
+          skillIds,
+          cohortId: cohortId || null,
+        }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -158,6 +176,22 @@ function NewTaskGroupForm({ onCreated }: { onCreated: () => void }) {
         </div>
       </div>
       <div className="field">
+        <label htmlFor="tg-cohort">Cohort</label>
+        <select
+          id="tg-cohort"
+          value={cohortId}
+          onChange={(e) => setCohortId(e.target.value)}
+        >
+          <option value="">No cohort</option>
+          {cohorts.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+              {c.isActive ? " (active)" : ""}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="field">
         <label htmlFor="tg-desc">Description</label>
         <textarea
           id="tg-desc"
@@ -167,15 +201,7 @@ function NewTaskGroupForm({ onCreated }: { onCreated: () => void }) {
           placeholder="What this group covers…"
         />
       </div>
-      <div className="field">
-        <label htmlFor="tg-skills">Required skills (comma-separated)</label>
-        <input
-          id="tg-skills"
-          value={skillsText}
-          onChange={(e) => setSkillsText(e.target.value)}
-          placeholder="React, TypeScript, Figma"
-        />
-      </div>
+      <SkillTagInput id="tg-skills" value={skills} onChange={setSkills} />
 
       {error && <p className="text-sm font-medium text-red-600">{error}</p>}
 

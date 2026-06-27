@@ -142,6 +142,18 @@ async function getActiveCohortId(): Promise<string | null> {
   return rows[0]?.id ?? null;
 }
 
+/** Lists cohorts for the admin task-group form (active ones first). */
+export async function listCohorts() {
+  return db
+    .select({
+      id: cohorts.id,
+      name: cohorts.name,
+      isActive: cohorts.isActive,
+    })
+    .from(cohorts)
+    .orderBy(desc(cohorts.isActive), desc(cohorts.createdAt));
+}
+
 export type NewInternInput = {
   email: string;
   fullName: string;

@@ -2,13 +2,10 @@
 
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { SkillTagInput } from "@/components/admin/SkillTagInput";
 import type { AdminSubgroup, AdminTask, TaskGroupDetail } from "@/lib/admin-types";
 
-async function resolveSkillIds(skillsText: string): Promise<string[]> {
-  const names = skillsText
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+async function resolveSkillIds(names: string[]): Promise<string[]> {
   if (names.length === 0) return [];
   const res = await fetch("/api/admin/skills", {
     method: "POST",
@@ -279,7 +276,7 @@ function AddTaskForm({
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [skillsText, setSkillsText] = useState("");
+  const [skills, setSkills] = useState<string[]>([]);
   const [sequenceOrder, setSequenceOrder] = useState(1);
   const [canRunConcurrent, setCanRunConcurrent] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -301,7 +298,7 @@ function AddTaskForm({
     setBusy(true);
     setError(null);
     try {
-      const requiredSkills = await resolveSkillIds(skillsText);
+      const requiredSkills = await resolveSkillIds(skills);
       const res = await fetch(`/api/admin/task-groups/${groupId}/tasks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -321,7 +318,7 @@ function AddTaskForm({
       }
       setTitle("");
       setDescription("");
-      setSkillsText("");
+      setSkills([]);
       setOpen(false);
       onAdded();
     } finally {
@@ -349,17 +346,11 @@ function AddTaskForm({
           onChange={(e) => setDescription(e.target.value)}
         />
       </div>
-      <div className="field">
-        <label htmlFor={`t-skills-${subgroupId ?? "direct"}`}>
-          Required skills (comma-separated)
-        </label>
-        <input
-          id={`t-skills-${subgroupId ?? "direct"}`}
-          value={skillsText}
-          onChange={(e) => setSkillsText(e.target.value)}
-          placeholder="React, CSS"
-        />
-      </div>
+      <SkillTagInput
+        id={`t-skills-${subgroupId ?? "direct"}`}
+        value={skills}
+        onChange={setSkills}
+      />
       <div className="flex flex-wrap items-end gap-4">
         <div className="field w-28">
           <label htmlFor={`t-seq-${subgroupId ?? "direct"}`}>Sequence</label>
