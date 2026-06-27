@@ -142,16 +142,105 @@ async function getActiveCohortId(): Promise<string | null> {
   return rows[0]?.id ?? null;
 }
 
-/** Lists cohorts for the admin task-group form (active ones first). */
+/** Lists cohorts for the admin UI (active first), with usage counts. */
 export async function listCohorts() {
-  return db
+  const rows = await db
     .select({
       id: cohorts.id,
       name: cohorts.name,
+      description: cohorts.description,
+      startsAt: cohorts.startsAt,
+      endsAt: cohorts.endsAt,
       isActive: cohorts.isActive,
+      createdAt: cohorts.createdAt,
+      taskGroupCount: sql<number>`(
+        SELECT count(*)::int FROM task_groups WHERE task_groups.cohort_id = ${cohorts.id}
+      )`,
+      internCount: sql<number>`(
+        SELECT count(*)::int FROM interns WHERE interns.cohort_id = ${cohorts.id}
+      )`,
     })
     .from(cohorts)
     .orderBy(desc(cohorts.isActive), desc(cohorts.createdAt));
+  return rows;
+}
+
+export type NewCohortInput = {
+  name: string;
+  description?: string | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  isActive?: boolean;
+};
+
+export async function createCohort(input: NewCohortInput) {
+  const [cohort] = await db
+    .insert(cohorts)
+    .values({
+      name: input.name,
+      description: input.description ?? null,
+      startsAt: input.startsAt ?? null,
+      endsAt: input.endsAt ?? null,
+      isActive: input.isActive ?? true,
+    })
+    .returning();
+  return cohort;
+}
+
+export type UpdateCohortInput = {
+  name?: string;
+  description?: string | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  isActive?: boolean;
+};
+
+export async function updateCohort(id: string, input: UpdateCohortInput) {
+  const patch: Record<string, unknown> = {};
+  if (input.name !== undefined) patch.name = input.name;
+  if (input.description !== undefined) patch.description = input.description;
+  if (input.startsAt !== undefined) patch.startsAt = input.startsAt;
+  if (input.endsAt !== undefined) patch.endsAt = input.endsAt;
+  if (input.isActive !== undefined) patch.isActive = input.isActive;
+  if (Object.keys(patch).length === 0) {
+    const [existing] = await db
+      .select()
+      .from(cohorts)
+      .where(eq(cohorts.id, id))
+      .limit(1);
+    return existing ?? null;
+  }
+  const [cohort] = await db
+    .update(cohorts)
+    .set(patch)
+    .where(eq(cohorts.id, id))
+    .returning();
+  return cohort ?? null;
+}
+
+/**
+ * Deletes a cohort. Interns and task groups reference it via ON DELETE SET NULL,
+ * so they're preserved (just unlinked). Returns true if a row was removed.
+ */
+export async function deleteCohort(id: string) {
+  const deleted = await db
+    .delete(cohorts)
+    .where(eq(cohorts.id, id))
+    .returning({ id: cohorts.id });
+  return deleted.length > 0;
+}
+
+/** Sets (or clears, with null) the cohort a task group belongs to. */
+export async function updateTaskGroupCohort(
+  taskGroupId: string,
+  cohortId: string | null
+) {
+  const [group] = await db
+    .update(taskGroups)
+    .set({ cohortId })
+    .where(eq(taskGroups.id, taskGroupId))
+    .returning();
+  return group ?? null;
 }
 
 export type NewInternInput = {
@@ -384,13 +473,28 @@ export async function getTaskGroupDetail(groupId: string) {
       .orderBy(tasks.sequenceOrder),
   ]);
 
+  let cohortName: string | null = null;
+  if (group.cohortId) {
+    const [c] = await db
+      .select({ name: cohorts.name })
+      .from(cohorts)
+      .where(eq(cohorts.id, group.cohortId))
+      .limit(1);
+    cohortName = c?.name ?? null;
+  }
+
   const directTasks = taskRows.filter((t) => t.taskGroupId === groupId);
   const subgroups = subgroupRows.map((sg) => ({
     ...sg,
     tasks: taskRows.filter((t) => t.taskSubgroupId === sg.id),
   }));
 
-  return { group, skills: groupSkillRows, subgroups, directTasks };
+  return {
+    group: { ...group, cohortName },
+    skills: groupSkillRows,
+    subgroups,
+    directTasks,
+  };
 }
 
 export type NewSubgroupInput = {

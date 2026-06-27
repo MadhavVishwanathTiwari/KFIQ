@@ -3,7 +3,12 @@
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { SkillTagInput } from "@/components/admin/SkillTagInput";
-import type { AdminSubgroup, AdminTask, TaskGroupDetail } from "@/lib/admin-types";
+import type {
+  AdminCohort,
+  AdminSubgroup,
+  AdminTask,
+  TaskGroupDetail,
+} from "@/lib/admin-types";
 
 async function resolveSkillIds(names: string[]): Promise<string[]> {
   if (names.length === 0) return [];
@@ -67,6 +72,14 @@ export default function TaskGroupDetailPage({
         {detail.group.description && (
           <p className="mt-1.5 text-sm text-zinc-500">{detail.group.description}</p>
         )}
+        <div className="mt-3">
+          <CohortLink
+            groupId={id}
+            cohortId={detail.group.cohortId}
+            cohortName={detail.group.cohortName}
+            onChanged={load}
+          />
+        </div>
         {detail.skills.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {detail.skills.map((s) => (
@@ -97,6 +110,100 @@ export default function TaskGroupDetailPage({
         ))}
         <AddSubgroupForm groupId={id} onAdded={load} />
       </section>
+    </div>
+  );
+}
+
+function CohortLink({
+  groupId,
+  cohortId,
+  cohortName,
+  onChanged,
+}: {
+  groupId: string;
+  cohortId: string | null;
+  cohortName: string | null;
+  onChanged: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [cohorts, setCohorts] = useState<AdminCohort[]>([]);
+  const [selected, setSelected] = useState(cohortId ?? "");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!editing) return;
+    fetch("/api/admin/cohorts")
+      .then((r) => r.json())
+      .then((data) => setCohorts(data.cohorts ?? []))
+      .catch(() => {});
+  }, [editing]);
+
+  async function save() {
+    setBusy(true);
+    const res = await fetch(`/api/admin/task-groups/${groupId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cohortId: selected || null }),
+    });
+    setBusy(false);
+    if (res.ok) {
+      setEditing(false);
+      onChanged();
+    }
+  }
+
+  if (!editing) {
+    return (
+      <div className="flex items-center gap-2 text-sm">
+        <span className="text-zinc-400">Cohort:</span>
+        <span className="font-medium text-zinc-700">
+          {cohortName ?? "Not linked"}
+        </span>
+        <button
+          type="button"
+          className="text-xs font-semibold text-zinc-400 hover:text-[#0a0a0a]"
+          onClick={() => {
+            setSelected(cohortId ?? "");
+            setEditing(true);
+          }}
+        >
+          {cohortName ? "Change" : "Link"}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <select
+        value={selected}
+        onChange={(e) => setSelected(e.target.value)}
+        className="rounded-lg border border-zinc-200 bg-[#fafafa] px-3 py-1.5 text-sm focus:border-[#0a0a0a] focus:bg-white focus:outline-none"
+      >
+        <option value="">No cohort</option>
+        {cohorts.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name}
+            {c.isActive ? " (active)" : ""}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        className="btn btn-primary"
+        onClick={save}
+        disabled={busy}
+      >
+        {busy ? "Saving…" : "Save"}
+      </button>
+      <button
+        type="button"
+        className="btn btn-secondary"
+        onClick={() => setEditing(false)}
+        disabled={busy}
+      >
+        Cancel
+      </button>
     </div>
   );
 }

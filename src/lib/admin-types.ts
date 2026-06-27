@@ -7,7 +7,17 @@ import type {
 
 export type AdminSkill = { id: string; name: string; category: string | null };
 
-export type AdminCohort = { id: string; name: string; isActive: boolean };
+export type AdminCohort = {
+  id: string;
+  name: string;
+  description: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  isActive: boolean;
+  createdAt: string;
+  taskGroupCount: number;
+  internCount: number;
+};
 
 export type TaskGroupListItem = {
   id: string;
@@ -46,6 +56,8 @@ export type TaskGroupDetail = {
     description: string | null;
     field: string;
     isOpen: boolean;
+    cohortId: string | null;
+    cohortName: string | null;
   };
   skills: { id: string; name: string }[];
   subgroups: AdminSubgroup[];
